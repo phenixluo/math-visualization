@@ -1,0 +1,1199 @@
+<template>
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-6">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-3xl font-bold text-center text-gray-800 mb-2">方程图形化</h2>
+      <p class="text-center text-gray-600 mb-6">通过天平理解等式两边相等的关系，学会解方程</p>
+      
+      <!-- 模式选择 -->
+      <div class="flex justify-center gap-4 mb-6">
+        <button 
+          @click="mode = 'explore'"
+          class="px-6 py-2 rounded-lg font-medium transition-all"
+          :class="mode === 'explore' ? 'bg-purple-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-100'"
+        >
+          探索模式
+        </button>
+        <button 
+          @click="setChallengeMode"
+          class="px-6 py-2 rounded-lg font-medium transition-all"
+          :class="mode === 'challenge' ? 'bg-purple-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-100'"
+        >
+          挑战模式
+        </button>
+      </div>
+      
+      <!-- 挑战模式 -->
+      <div v-if="mode === 'challenge' && challengeEquation" class="text-center mb-6">
+        <div class="inline-block bg-purple-100 border-2 border-purple-400 rounded-xl px-8 py-4">
+          <div class="text-sm text-purple-600 mb-1">目标方程</div>
+          <div class="text-2xl font-bold text-purple-800">{{ challengeEquation.left }} = {{ challengeEquation.right }}</div>
+          <div class="text-sm text-purple-600 mt-2">拖动砝码使天平平衡，然后告诉我 x = ?</div>
+        </div>
+        <div class="mt-4">
+          <span class="text-gray-600">你的答案：</span>
+          <span class="font-bold text-gray-800">x = </span>
+          <input 
+            v-model.number="studentAnswer" 
+            type="number" 
+            class="w-16 px-2 py-1 border-2 border-purple-300 rounded-lg text-center font-bold text-lg"
+            placeholder="?"
+          />
+          <button 
+            @click="checkAnswer"
+            class="ml-3 px-4 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+          >
+            检查答案
+          </button>
+          <span v-if="answerFeedback" class="ml-3 font-bold" :class="answerFeedback === '正确！' ? 'text-green-600' : 'text-red-600'">
+            {{ answerFeedback }}
+          </span>
+        </div>
+      </div>
+      
+      <!-- 天平区域 -->
+      <div class="balance-area bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div class="balance-stand relative h-72 flex items-end justify-center">
+
+          <div class="pillar absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-40 bg-gradient-to-t from-amber-700 to-amber-500 rounded-t-lg"></div>
+          <div class="base absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-5 bg-gradient-to-t from-amber-800 to-amber-600 rounded-lg shadow-md"></div>
+
+          <!-- 旋转视觉部分（仅视觉效果） -->
+          <div
+            class="beam-rotate absolute pointer-events-none"
+            :style="{ bottom: '160px', left: '50%', transform: `translateX(-50%) rotate(${beamAngle}deg)`, transformOrigin: 'center center' }"
+          >
+            <div class="beam relative w-[500px] h-3 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 rounded-full shadow-lg">
+              <!-- 支点 -->
+              <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-amber-900 border-4 border-amber-500 flex items-center justify-center">
+                <span class="text-white text-sm font-bold">=</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 左侧托盘（随倾斜上下移动） -->
+          <div 
+            class="absolute" 
+            :style="{ 
+              left: 'calc(50% - 250px)', 
+              top: `${180 - Math.sin(beamAngle * Math.PI / 180) * 250}px`,
+              transition: 'top 0.5s ease-in-out'
+            }"
+          >
+            <!-- 左侧绳子（连接横梁和托盘） -->
+            <div class="absolute left-1/2 -translate-x-1/2 w-0.5 bg-amber-800"
+                 :style="{ 
+                   height: '52px',
+                   top: '-52px',
+                   transition: 'height 0.5s ease-in-out'
+                 }">
+            </div>
+            <div
+              class="tray w-48 min-h-24 bg-gradient-to-b from-gray-100 to-gray-200 border-2 border-gray-400 rounded-lg shadow-md p-2 flex flex-wrap gap-1 justify-center items-center content-start drop-zone cursor-pointer"
+              :class="{ 'ring-4 ring-blue-400 bg-blue-50 scale-105': isDragOver === 'left' }"
+              @click="handleTrayClick('left')"
+              @mouseenter="isDragOver = selectedWeight ? 'left' : null"
+              @mouseleave="isDragOver = null"
+            >
+              <div
+                v-for="(token, idx) in leftRawTokensDisplay"
+                :key="'left-' + idx"
+                class="weight-chip"
+                :class="getChipClass(token)"
+                @click.stop="removeFromTray('left', idx)"
+                :title="'点击删除 ' + token.display"
+              >
+                <span class="font-mono font-bold">{{ token.display }}</span>
+              </div>
+              <div v-if="leftRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
+                点击添加
+              </div>
+            </div>
+            <div class="mt-2 text-center font-mono text-sm bg-blue-50 rounded px-2 py-1">
+              <span class="text-xs text-gray-500">化简：</span>
+              <span class="font-bold text-blue-700">{{ leftSimplified || '0' }}</span>
+              <span class="text-xs text-gray-500 ml-1">常数={{ leftConstant }}</span>
+            </div>
+          </div>
+
+          <!-- 右侧托盘（随倾斜上下移动） -->
+          <div 
+            class="absolute" 
+            :style="{ 
+              right: 'calc(50% - 250px)', 
+              top: `${180 + Math.sin(beamAngle * Math.PI / 180) * 250}px`,
+              transition: 'top 0.5s ease-in-out'
+            }"
+          >
+            <!-- 右侧绳子（连接横梁和托盘） -->
+            <div class="absolute left-1/2 -translate-x-1/2 w-0.5 bg-amber-800"
+                 :style="{ 
+                   height: '52px',
+                   top: '-52px',
+                   transition: 'height 0.5s ease-in-out'
+                 }">
+            </div>
+            <div
+              class="tray w-48 min-h-24 bg-gradient-to-b from-gray-100 to-gray-200 border-2 border-gray-400 rounded-lg shadow-md p-2 flex flex-wrap gap-1 justify-center items-center content-start drop-zone cursor-pointer"
+              :class="{ 'ring-4 ring-red-400 bg-red-50 scale-105': isDragOver === 'right' }"
+              @click="handleTrayClick('right')"
+              @mouseenter="isDragOver = selectedWeight ? 'right' : null"
+              @mouseleave="isDragOver = null"
+            >
+              <div
+                v-for="(token, idx) in rightRawTokensDisplay"
+                :key="'right-' + idx"
+                class="weight-chip"
+                :class="getChipClass(token)"
+                @click.stop="removeFromTray('right', idx)"
+                :title="'点击删除 ' + token.display"
+              >
+                <span class="font-mono font-bold">{{ token.display }}</span>
+              </div>
+              <div v-if="rightRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
+                点击添加
+              </div>
+            </div>
+            <div class="mt-2 text-center font-mono text-sm bg-red-50 rounded px-2 py-1">
+              <span class="text-xs text-gray-500">化简：</span>
+              <span class="font-bold text-red-700">{{ rightSimplified || '0' }}</span>
+              <span class="text-xs text-gray-500 ml-1">常数={{ rightConstant }}</span>
+            </div>
+          </div>
+
+          <!-- 天平状态 -->
+          <div class="result-badge absolute top-4 left-1/2 -translate-x-1/2 px-6 py-2 rounded-full shadow-lg text-lg font-bold transition-all"
+            :class="resultClass">
+            {{ resultText }}
+          </div>
+
+        </div>
+        
+        <!-- 等式显示 -->
+        <div class="mt-8 flex justify-center items-center gap-4 text-xl font-mono">
+          <div class="px-4 py-2 bg-blue-50 rounded-lg">
+            <span class="font-bold text-blue-700">{{ leftSimplified || '0' }}</span>
+          </div>
+          <div class="text-2xl font-bold text-gray-400">=</div>
+          <div class="px-4 py-2 bg-red-50 rounded-lg">
+            <span class="font-bold text-red-700">{{ rightSimplified || '0' }}</span>
+          </div>
+        </div>
+        
+        <!-- 操作提示 -->
+        <div v-if="stepHint" class="mt-4 text-center">
+          <div class="inline-block bg-amber-100 border border-amber-400 rounded-lg px-6 py-3 text-amber-900">
+            <div class="text-lg font-bold mb-1">📐 提示</div>
+            <div class="text-sm">{{ stepHint }}</div>
+          </div>
+        </div>
+        
+        <!-- 解方程成功 -->
+        <div v-if="showXResult && solvedX !== null" class="mt-4 text-center">
+          <div class="inline-block bg-green-100 border-2 border-green-400 rounded-xl px-6 py-3">
+            <div class="text-green-700 text-lg">
+              🎉 解方程成功！<br/>
+              <span class="text-3xl font-bold">x = {{ solvedX }}</span>
+            </div>
+            <div class="text-green-600 text-sm mt-2">
+              验证：{{ leftSimplified }} = {{ rightSimplified }} = {{ solvedX }}
+            </div>
+          </div>
+        </div>
+        
+        <!-- 方程输入区 -->
+        <div class="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+          <div class="flex items-center justify-center gap-4">
+            <label class="text-gray-700 font-medium">输入方程：</label>
+            <input
+              v-model="inputEquation"
+              type="text"
+              placeholder="例如: 3 - x = 2"
+              class="px-4 py-2 border-2 border-blue-300 rounded-lg font-mono text-lg w-64 focus:outline-none focus:border-purple-500"
+              @keyup.enter="parseEquation"
+            />
+            <button
+              @click="parseEquation"
+              class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            >
+              解析方程
+            </button>
+          </div>
+          <div v-if="equationError" class="mt-2 text-center text-red-500 text-sm">
+            {{ equationError }}
+          </div>
+          <div v-if="inputEquation && !equationError" class="mt-2 text-center text-gray-600 text-sm">
+            💡 输入格式：左边表达式 = 右边表达式（支持 x、数字、+-*/）
+          </div>
+        </div>
+        
+      </div>
+      
+      <!-- 砝码区域 -->
+      <div class="weights-area bg-white rounded-2xl shadow-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-800">砝码区 <span class="text-sm text-gray-500 font-normal">（点击选择砝码，然后点击天平托盘添加）</span></h3>
+          <button
+            @click="resetAll"
+            class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+          >
+            重置
+          </button>
+        </div>
+
+        <div class="mb-3 text-center text-sm text-gray-600">
+          <span v-if="selectedWeight">
+            <span class="font-bold text-purple-600">已选择：{{ selectedWeight }}</span>
+            <span class="ml-2">→ 点击天平托盘添加</span>
+          </span>
+          <span v-else>请选择一个砝码</span>
+        </div>
+
+        <div class="grid grid-cols-10 gap-2">
+          <div
+            v-for="(weight, idx) in weights"
+            :key="idx"
+            class="weight-chip cursor-pointer"
+            :class="[getChipClass(weight), selectedWeight === weight ? 'ring-4 ring-purple-400 scale-110' : 'hover:scale-105']"
+            @click="selectWeight(weight)"
+            :title="'选择 ' + weight"
+          >
+            <span class="font-mono font-bold">{{ weight }}</span>
+          </div>
+        </div>
+        
+        <div class="mt-4 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <p class="text-sm text-gray-700">
+            <span class="font-semibold text-purple-800">💡 解方程规则：</span><br/>
+            1. x 和 -x 在同一托盘相遇会互相抵消消失<br/>
+            2. 天平倾斜程度由两边的<strong>常数项差值</strong>决定<br/>
+            3. 两边都含 x 时天平保持平衡（因为不知道 x 多大）<br/>
+            4. 当一边只剩 x，另一边只剩数字时，x 的值就出来了！
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue'
+
+const weights = [
+  'x', '-x',
+  '+', '-', '*', '/',
+  '1', '2', '3', '4', '5', '6', '7', '8', '9',
+  '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9'
+]
+
+const leftRawTokens = ref([])  // 原始输入顺序
+const rightRawTokens = ref([])
+const isDragOver = ref(null)
+const selectedWeight = ref(null)
+const mode = ref('explore')
+const studentAnswer = ref(null)
+const answerFeedback = ref('')
+const challengeEquation = ref(null)
+const showXResult = ref(false)
+const inputEquation = ref('')
+const equationError = ref('')
+const solvedXValue = ref(null)  // 存储从方程中计算出的真实x值（不显示）
+
+// 选择砝码
+const selectWeight = (weight) => {
+  if (selectedWeight.value === weight) {
+    selectedWeight.value = null  // 再次点击取消选择
+  } else {
+    selectedWeight.value = weight
+  }
+}
+
+// 点击托盘添加砝码
+const handleTrayClick = (side) => {
+  if (!selectedWeight.value) return
+  const weight = selectedWeight.value
+  if (side === 'left') {
+    leftRawTokens.value = [...leftRawTokens.value, weight]
+  } else {
+    rightRawTokens.value = [...rightRawTokens.value, weight]
+  }
+  // 添加后保持选中状态，方便连续添加
+}
+
+// 解析一个 token 的类型和值
+const parseToken = (t) => {
+  if (!isNaN(t)) return { type: 'num', num: parseInt(t) }
+  if (t === 'x') return { type: 'x', coeff: 1 }
+  if (t === '-x') return { type: 'x', coeff: -1 }
+  if (typeof t === 'string' && t.endsWith('x') && !t.includes('/')) {
+    const coeff = parseInt(t.replace('x', ''))
+    return { type: 'x', coeff: coeff || 1 }
+  }
+  if (typeof t === 'string' && t.includes('/x')) {
+    const num = parseInt(t.replace('/x', ''))
+    return { type: 'n/x', num: num || 0 }
+  }
+  if (typeof t === 'string' && t.startsWith('x/')) {
+    const num = parseInt(t.replace('x/', ''))
+    return { type: 'x/n', num: num || 0 }
+  }
+  return { type: 'unknown', value: t }
+}
+
+// 简化表达式：处理加减乘除，计算x系数和常数项
+const simplify = (tokens) => {
+  // 先处理乘除运算（优先级高于加减）
+  let processed = []
+  let i = 0
+  while (i < tokens.length) {
+    const t = tokens[i]
+    if (t === '*' || t === '/') {
+      // 取前一个和后一个元素
+      const prev = processed.pop()
+      const next = tokens[i + 1]
+      if (prev === undefined || next === undefined || next === '/' || next === '*') {
+        // 无效状态，退回
+        if (prev !== undefined) processed.push(prev)
+        processed.push(t)
+        if (next !== undefined && next !== '*' && next !== '/') {
+          processed.push(next)
+          i += 2
+        } else {
+          i++
+        }
+        continue
+      }
+
+      // 解析左右操作数
+      const left = parseToken(prev)
+      const right = parseToken(next)
+
+      if (left.type === 'unknown' || right.type === 'unknown') {
+        processed.push(prev)
+        processed.push(t)
+        i++
+        continue
+      }
+
+      if (t === '*') {
+        // 乘法
+        if (left.type === 'num' && right.type === 'num') {
+          processed.push(String(left.num * right.num))
+        } else if ((left.type === 'num' && right.type === 'x') || (left.type === 'x' && right.type === 'num')) {
+          const num = left.type === 'num' ? left.num : right.num
+          const coeff = left.type === 'x' ? left.coeff : right.coeff
+          const c = num * coeff
+          if (c === 1) processed.push('x')
+          else if (c === -1) processed.push('-x')
+          else processed.push(c + 'x')
+        } else if (left.type === 'x' && right.type === 'x') {
+          // x * x 复杂，保留
+          processed.push(prev)
+          processed.push(t)
+        } else if (left.type === 'n/x' && right.type === 'x') {
+          // n/x * x = n
+          processed.push(String(left.num))
+        } else if (left.type === 'x/n' && right.type === 'x') {
+          // x/n * x = x²/n，保留为 x*x/n
+          processed.push(prev)
+          processed.push(t)
+        } else if (left.type === 'x' && right.type === 'n/x') {
+          // x * n/x = n
+          processed.push(String(right.num))
+        } else if (left.type === 'x' && right.type === 'x/n') {
+          // x * x/n = x²/n，保留为 x*x/n
+          processed.push(prev)
+          processed.push(t)
+        } else if (left.type === 'n/x' && right.type === 'n/x') {
+          // n/x * m/x = n*m/x²，保留
+          processed.push(prev)
+          processed.push(t)
+        } else if (left.type === 'n/x' && right.type === 'num') {
+          // n/x * num = (n*num)/x
+          processed.push((left.num * right.num) + '/x')
+        } else if (left.type === 'num' && right.type === 'n/x') {
+          // num * n/x = (num*n)/x
+          processed.push((left.num * right.num) + '/x')
+        } else {
+          processed.push(prev)
+          processed.push(t)
+        }
+        i += 2
+      } else if (t === '/') {
+        // 除法
+        if (left.type === 'num' && right.type === 'num') {
+          if (right.num === 0) {
+            processed.push(prev)
+            processed.push(t)
+          } else {
+            const result = left.num / right.num
+            if (Number.isInteger(result)) {
+              processed.push(String(result))
+            } else {
+              processed.push(prev)
+              processed.push(t)
+            }
+          }
+        } else if (left.type === 'x' && right.type === 'num') {
+          // nx / n  -> 7x / 7 = x
+          if (right.num === 0) {
+            processed.push(prev)
+            processed.push(t)
+          } else if (left.coeff % right.num === 0) {
+            const c = left.coeff / right.num
+            if (c === 1) processed.push('x')
+            else if (c === -1) processed.push('-x')
+            else processed.push(c + 'x')
+          } else {
+            processed.push('x/' + right.num)
+          }
+        } else if (left.type === 'num' && right.type === 'x') {
+          // n / x
+          processed.push(left.num + '/x')
+        } else if (left.type === 'x' && right.type === 'x') {
+          // nx / x = n
+          if (right.coeff !== 0) {
+            const result = left.coeff / right.coeff
+            if (Number.isInteger(result)) {
+              processed.push(String(result))
+            } else {
+              processed.push(prev)
+              processed.push(t)
+            }
+          } else {
+            processed.push(prev)
+            processed.push(t)
+          }
+        } else {
+          processed.push(prev)
+          processed.push(t)
+        }
+        i += 2
+      }
+    } else {
+      processed.push(t)
+      i++
+    }
+  }
+
+  // 然后处理加减运算（处理正负号 + - 前缀）
+  let xCount = 0
+  let constant = 0
+  let hasDivision = false
+  let divisionType = ''  // 'n/x' 或 'x/n'
+  let divisionValue = 0
+  let sign = 1  // 当前符号
+
+  for (let j = 0; j < processed.length; j++) {
+    const t = processed[j]
+    if (t === '+') {
+      sign = 1
+      continue
+    }
+    if (t === '-') {
+      sign = -1
+      continue
+    }
+
+    const parsed = parseToken(t)
+    if (parsed.type === 'x') {
+      xCount += sign * parsed.coeff
+    } else if (parsed.type === 'n/x') {
+      hasDivision = true
+      divisionType = 'n/x'
+      divisionValue = sign * parsed.num
+    } else if (parsed.type === 'x/n') {
+      hasDivision = true
+      divisionType = 'x/n'
+      divisionValue = sign * parsed.num
+    } else if (parsed.type === 'num') {
+      constant += sign * parsed.num
+    }
+    sign = 1  // 处理完一个操作数后重置符号
+  }
+
+  const tokens2 = []
+  if (hasDivision) {
+    if (divisionType === 'n/x') {
+      tokens2.push(divisionValue + '/x')
+    } else if (divisionType === 'x/n') {
+      tokens2.push('x/' + divisionValue)
+    }
+    // 加上常数项
+    if (constant > 0) {
+      tokens2.push('+' + constant)
+    } else if (constant < 0) {
+      tokens2.push(String(constant))
+    }
+  } else {
+    if (xCount > 0) {
+      if (xCount === 1) tokens2.push('x')
+      else tokens2.push(xCount + 'x')
+    } else if (xCount < 0) {
+      if (xCount === -1) tokens2.push('-x')
+      else tokens2.push(xCount + 'x')
+    }
+
+    if (constant > 0) {
+      if (tokens2.length > 0) tokens2.push('+' + constant)
+      else tokens2.push(String(constant))
+    } else if (constant < 0) {
+      tokens2.push(String(constant))
+    }
+  }
+
+  return {
+    tokens: tokens2,
+    xCount,
+    constant,
+    hasDivision,
+    divisionType,
+    divisionValue,
+    display: tokens2.length > 0 ? tokens2.join('') : '0'
+  }
+}
+
+const simplifiedLeft = computed(() => simplify(leftRawTokens.value))
+const simplifiedRight = computed(() => simplify(rightRawTokens.value))
+
+// 托盘显示信息：显示原始砝码，当自动简化触发时会更新
+const leftRawTokensDisplay = computed(() => {
+  return leftRawTokens.value.map(t => ({
+    display: t,
+    coeff: t === 'x' ? 1 : (t === '-x' ? -1 : parseInt(t) || t)
+  }))
+})
+
+const rightRawTokensDisplay = computed(() => {
+  return rightRawTokens.value.map(t => ({
+    display: t,
+    coeff: t === 'x' ? 1 : (t === '-x' ? -1 : parseInt(t) || t)
+  }))
+})
+
+const leftSimplified = computed(() => simplifiedLeft.value.display)
+const rightSimplified = computed(() => simplifiedRight.value.display)
+const leftConstant = computed(() => simplifiedLeft.value.constant)
+const rightConstant = computed(() => simplifiedRight.value.constant)
+
+// 天平倾斜：基于真实的x值计算
+const beamAngle = computed(() => {
+  const left = simplifiedLeft.value
+  const right = simplifiedRight.value
+
+  // 如果有真实的 x 值，使用真实 x 值计算
+  if (solvedXValue.value !== null) {
+    const x = solvedXValue.value
+    let leftValue, rightValue
+
+    // 计算左边值
+    if (left.hasDivision) {
+      if (left.divisionType === 'n/x') {
+        leftValue = left.divisionValue / x + left.constant
+      } else if (left.divisionType === 'x/n') {
+        leftValue = x / left.divisionValue + left.constant
+      } else {
+        leftValue = left.constant
+      }
+    } else {
+      leftValue = left.xCount * x + left.constant
+    }
+
+    // 计算右边值
+    if (right.hasDivision) {
+      if (right.divisionType === 'n/x') {
+        rightValue = right.divisionValue / x + right.constant
+      } else if (right.divisionType === 'x/n') {
+        rightValue = x / right.divisionValue + right.constant
+      } else {
+        rightValue = right.constant
+      }
+    } else {
+      rightValue = right.xCount * x + right.constant
+    }
+
+    const diff = leftValue - rightValue
+    const maxAngle = 15
+    return -Math.max(-maxAngle, Math.min(maxAngle, diff * 2))
+  }
+
+  // 如果没有真实的 x 值（探索模式）
+  // 两边都有x项
+  if (left.xCount !== 0 && right.xCount !== 0) {
+    const xCoeffDiff = left.xCount - right.xCount
+    const constDiff = left.constant - right.constant
+    if (xCoeffDiff === 0) {
+      const diff = constDiff
+      const maxAngle = 15
+      return -Math.max(-maxAngle, Math.min(maxAngle, diff * 2))
+    }
+    return 0
+  }
+
+  // 一边有x一边没有x
+  if (left.xCount !== 0 && right.xCount === 0) {
+    return -8
+  }
+  if (right.xCount !== 0 && left.xCount === 0) {
+    return 8
+  }
+
+  // 两边都没有x，比较常数项
+  const diff = left.constant - right.constant
+  const maxAngle = 15
+  return -Math.max(-maxAngle, Math.min(maxAngle, diff * 2))
+})
+
+const resultText = computed(() => {
+  const left = simplifiedLeft.value
+  const right = simplifiedRight.value
+  
+  if (left.tokens.length === 0 && right.tokens.length === 0) return '⚖️ 天平平衡（空）'
+
+  // 如果有真实的 x 值，使用真实 x 值计算
+  if (solvedXValue.value !== null) {
+    const x = solvedXValue.value
+    const leftValue = left.xCount * x + left.constant
+    const rightValue = right.xCount * x + right.constant
+
+    if (leftValue === rightValue) {
+      return '⚖️ 天平平衡！'
+    }
+    if (leftValue > rightValue) {
+      return '↘️ 左边更重'
+    }
+    return '↙️ 右边更重'
+  }
+
+  // 两边都有x项
+  if (left.xCount !== 0 && right.xCount !== 0) {
+    if (left.xCount === right.xCount && left.constant === right.constant) {
+      return '⚖️ 天平平衡！（两边相同）'
+    }
+    if (left.xCount > right.xCount) {
+      return '↘️ 左边x更多'
+    }
+    if (right.xCount > left.xCount) {
+      return '↙️ 右边x更多'
+    }
+    return '⚖️ 平衡中（x系数相同时）'
+  }
+
+  // 左边有x，右边没有x
+  if (left.xCount !== 0 && right.xCount === 0) {
+    return '↘️ 左边更重（含有未知数x）'
+  }
+
+  // 右边有x，左边没有x
+  if (right.xCount !== 0 && left.xCount === 0) {
+    return '↙️ 右边更重（含有未知数x）'
+  }
+
+  // 两边都没有x，比较常数
+  if (left.constant === right.constant) return '⚖️ 天平平衡！'
+  if (left.constant > right.constant) return '↘️ 左边更重（常数为 ' + left.constant + '）'
+  return '↙️ 右边更重（常数为 ' + right.constant + '）'
+})
+
+const resultClass = computed(() => {
+  const left = simplifiedLeft.value
+  const right = simplifiedRight.value
+
+  if (left.tokens.length === 0 && right.tokens.length === 0) {
+    return 'bg-gray-100 text-gray-600 border-2 border-gray-300'
+  }
+
+  // 如果有真实的 x 值，使用真实 x 值计算
+  if (solvedXValue.value !== null) {
+    const x = solvedXValue.value
+    let leftValue, rightValue
+
+    // 计算左边值
+    if (left.hasDivision) {
+      if (left.divisionType === 'n/x') {
+        leftValue = left.divisionValue / x + left.constant
+      } else if (left.divisionType === 'x/n') {
+        leftValue = x / left.divisionValue + left.constant
+      } else {
+        leftValue = left.constant
+      }
+    } else {
+      leftValue = left.xCount * x + left.constant
+    }
+
+    // 计算右边值
+    if (right.hasDivision) {
+      if (right.divisionType === 'n/x') {
+        rightValue = right.divisionValue / x + right.constant
+      } else if (right.divisionType === 'x/n') {
+        rightValue = x / right.divisionValue + right.constant
+      } else {
+        rightValue = right.constant
+      }
+    } else {
+      rightValue = right.xCount * x + right.constant
+    }
+
+    if (leftValue === rightValue) {
+      return 'bg-green-100 text-green-700 border-2 border-green-300'
+    }
+    if (leftValue > rightValue) {
+      return 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+    }
+    return 'bg-red-100 text-red-700 border-2 border-red-300'
+  }
+
+  // 两边都有x项
+  if (left.xCount !== 0 && right.xCount !== 0) {
+    if (left.xCount === right.xCount && left.constant === right.constant) {
+      return 'bg-green-100 text-green-700 border-2 border-green-300'
+    }
+    if (left.xCount > right.xCount) {
+      return 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+    }
+    if (right.xCount > left.xCount) {
+      return 'bg-red-100 text-red-700 border-2 border-red-300'
+    }
+    return 'bg-purple-100 text-purple-700 border-2 border-purple-300'
+  }
+
+  // 一边有x一边没有x
+  if (left.xCount !== 0 && right.xCount === 0) {
+    return 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+  }
+  if (right.xCount !== 0 && left.xCount === 0) {
+    return 'bg-red-100 text-red-700 border-2 border-red-300'
+  }
+
+  // 两边都没有x，比较常数
+  if (left.constant === right.constant) {
+    return 'bg-green-100 text-green-700 border-2 border-green-300'
+  }
+  if (left.constant > right.constant) {
+    return 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+  }
+  return 'bg-red-100 text-red-700 border-2 border-red-300'
+})
+
+const solvedX = computed(() => {
+  const left = simplifiedLeft.value
+  const right = simplifiedRight.value
+  
+  if (left.xCount === 1 && right.xCount === 0 && left.constant === right.constant) {
+    return right.constant
+  }
+  if (right.xCount === 1 && left.xCount === 0 && left.constant === right.constant) {
+    return left.constant
+  }
+  return null
+})
+
+const stepHint = computed(() => {
+  const left = simplifiedLeft.value
+  const right = simplifiedRight.value
+  
+  if (left.tokens.length === 0 && right.tokens.length === 0) return ''
+  
+  // 两边都有x
+  if (left.xCount !== 0 && right.xCount !== 0) {
+    if (left.xCount === right.xCount && left.constant === right.constant) {
+      return '两边完全相同，天平平衡！'
+    }
+    return '两边都有 x 项，无法直接比较，继续操作使等式成立'
+  }
+  
+  // 一边有x一边没有
+  if (left.xCount === 1 && right.xCount === 0) {
+    if (right.constant !== 0) {
+      return '左边只剩 x，右边是数字 ' + right.constant + '，所以 x = ' + right.constant + '！'
+    }
+    return '左边只剩 x，右边为空，x = ?'
+  }
+  if (right.xCount === 1 && left.xCount === 0) {
+    if (left.constant !== 0) {
+      return '右边只剩 x，左边是数字 ' + left.constant + '，所以 x = ' + left.constant + '！'
+    }
+    return '右边只剩 x，左边为空，x = ?'
+  }
+  
+  // 两边都没有x
+  if (left.constant > right.constant) {
+    return '左边常数 ' + left.constant + ' > 右边常数 ' + right.constant + '，需要消减左边的数或增加右边的数'
+  }
+  if (left.constant < right.constant) {
+    return '右边常数 ' + right.constant + ' > 左边常数 ' + left.constant + '，需要消减右边的数或增加左边的数'
+  }
+  
+  return ''
+})
+
+// 判断表达式是否完整（没有悬空的运算符）
+const isExpressionComplete = (tokens) => {
+  if (tokens.length === 0) return true
+  const last = tokens[tokens.length - 1]
+  // 最后一个不能是运算符
+  if (last === '+' || last === '-' || last === '*' || last === '/') return false
+  return true
+}
+
+// 将 simplify 的结果转换为 tokens 数组（用于自动简化）
+const simplifyResultToTokens = (simplified) => {
+  if (simplified.tokens.length === 0) return []
+  const result = []
+  for (const t of simplified.tokens) {
+    if (t === 'x' || t === '-x') {
+      result.push(t)
+    } else if (typeof t === 'string') {
+      // 处理 x/n 格式 -> ['x', '/', n]
+      if (t.startsWith('x/') && t.length > 2) {
+        result.push('x', '/', t.replace('x/', ''))
+      }
+      // 处理 n/x 格式 -> [n, '/', 'x']
+      else if (t.includes('/x') && !t.startsWith('x/')) {
+        result.push(t.replace('/x', ''), '/', 'x')
+      }
+      // 处理 nx 格式（如 7x, -7x）
+      else if (t.endsWith('x') && t.length > 1) {
+        result.push(t)
+      }
+      // 处理普通数字
+      else {
+        const num = parseInt(t)
+        if (!isNaN(num)) {
+          result.push(String(num))
+        } else {
+          result.push(t)
+        }
+      }
+    }
+  }
+  return result
+}
+
+// watch tokens 变化：处理 challenge 模式 + 自动简化（当表达式完整时可消除砝码）
+let isAutoSimplifying = false  // 防止递归触发
+watch([leftRawTokens, rightRawTokens], () => {
+  if (isAutoSimplifying) return
+  isAutoSimplifying = true
+
+  if (mode.value === 'challenge') {
+    if (solvedX.value !== null) {
+      showXResult.value = true
+    } else {
+      showXResult.value = false
+    }
+  }
+
+  // 左边自动简化：只有当表达式完整且简化后长度更短时才更新
+  if (isExpressionComplete(leftRawTokens.value)) {
+    const leftSimplified = simplify(leftRawTokens.value)
+    const leftTokens = simplifyResultToTokens(leftSimplified)
+    if (leftTokens.length > 0 && leftTokens.length < leftRawTokens.value.length) {
+      leftRawTokens.value = leftTokens
+    }
+  }
+
+  // 右边自动简化
+  if (isExpressionComplete(rightRawTokens.value)) {
+    const rightSimplified = simplify(rightRawTokens.value)
+    const rightTokens = simplifyResultToTokens(rightSimplified)
+    if (rightTokens.length > 0 && rightTokens.length < rightRawTokens.value.length) {
+      rightRawTokens.value = rightTokens
+    }
+  }
+
+  setTimeout(() => {
+    isAutoSimplifying = false
+  }, 0)
+}, { deep: true })
+
+const setChallengeMode = () => {
+  mode.value = 'challenge'
+  studentAnswer.value = null
+  answerFeedback.value = ''
+  showXResult.value = false
+  
+  const challenges = [
+    { left: 'x + 3', right: '8' },
+    { left: 'x + 5', right: '12' },
+    { left: 'x - 2', right: '7' },
+    { left: '3 - x', right: '2' },
+  ]
+  
+  const challenge = challenges[Math.floor(Math.random() * challenges.length)]
+  
+  // 根据目标方程设置初始状态
+  leftRawTokens.value = []
+  rightRawTokens.value = []
+  
+  // 解析左边
+  if (challenge.left.includes('x')) {
+    const parts = challenge.left.split('x')
+    if (parts[0] === '' || parts[0] === '+') {
+      leftRawTokens.value.push('x')
+    } else if (parts[0] === '-') {
+      leftRawTokens.value.push('-x')
+    } else {
+      leftRawTokens.value.push(parts[0].replace('+', '') + 'x')
+    }
+    const num = parts[1].match(/[+-]?\d+/)?.[0]
+    if (num) {
+      leftRawTokens.value.push(num)
+    }
+  }
+  
+  // 解析右边
+  const rightNum = challenge.right.match(/[+-]?\d+/)?.[0]
+  if (rightNum) {
+    rightRawTokens.value.push(rightNum)
+  }
+  
+  challengeEquation.value = challenge
+}
+
+const checkAnswer = () => {
+  if (studentAnswer.value === null) return
+  
+  const expected = solvedX.value
+  if (expected !== null && studentAnswer.value === expected) {
+    answerFeedback.value = '正确！'
+  } else if (expected !== null) {
+    answerFeedback.value = `不对哦，x = ${expected}`
+  } else {
+    answerFeedback.value = '还没有求出 x 的值'
+  }
+}
+
+const getChipClass = (token) => {
+  // token 可能是字符串（原始砝码区）或对象（简化后的）
+  let value = token
+  if (typeof token === 'object' && token !== null && token.display !== undefined) {
+    value = token.display
+  }
+
+  if (value === 'x' || value === '-x') {
+    return 'bg-purple-200 text-purple-900 border-purple-400 cursor-grab'
+  }
+  if (['+', '-', '*', '/'].includes(value)) {
+    return 'bg-blue-200 text-blue-900 border-blue-400 cursor-grab'
+  }
+  if (typeof value === 'string' && value.startsWith('-')) {
+    return 'bg-red-100 text-red-800 border-red-300 cursor-grab'
+  }
+  if (typeof value === 'number' && value < 0) {
+    return 'bg-red-100 text-red-800 border-red-300 cursor-grab'
+  }
+  return 'bg-green-100 text-green-800 border-green-300 cursor-grab'
+}
+
+const removeFromTray = (side, idx) => {
+  if (side === 'left') {
+    leftRawTokens.value = leftRawTokens.value.filter((_, i) => i !== idx)
+  } else {
+    rightRawTokens.value = rightRawTokens.value.filter((_, i) => i !== idx)
+  }
+}
+
+const resetAll = () => {
+  leftRawTokens.value = []
+  rightRawTokens.value = []
+  showXResult.value = false
+  answerFeedback.value = ''
+  studentAnswer.value = null
+  challengeEquation.value = null
+  mode.value = 'explore'
+  inputEquation.value = ''
+  equationError.value = ''
+  solvedXValue.value = null
+}
+
+const parseExpression = (expr) => {
+  const tokens = []
+  expr = expr.replace(/\s+/g, '')
+  
+  let i = 0
+  while (i < expr.length) {
+    const char = expr[i]
+    
+    // x 变量
+    if (char === 'x') {
+      tokens.push('x')
+      i++
+    }
+    // 操作符 + - * /
+    else if (['+', '*', '/'].includes(char)) {
+      tokens.push(char)
+      i++
+    }
+    // 负号（需要判断是一元负号还是二元减号）
+    else if (char === '-') {
+      // 判断是否是一元负号：位于开头、或前一个token是左括号/操作符/=
+      const prevToken = tokens[tokens.length - 1]
+      const isUnaryMinus = tokens.length === 0 || 
+                           prevToken === '(' || 
+                           prevToken === '+' || 
+                           prevToken === '-' || 
+                           prevToken === '*' || 
+                           prevToken === '/' ||
+                           prevToken === '='
+      
+      if (i + 1 < expr.length) {
+        const nextChar = expr[i + 1]
+        if (nextChar === 'x') {
+          // -x
+          tokens.push('-x')
+          i += 2
+        } else if (/\d/.test(nextChar)) {
+          // 负数如 -3
+          let num = '-'
+          i++ // 跳过负号
+          while (i < expr.length && /\d/.test(expr[i])) {
+            num += expr[i]
+            i++
+          }
+          tokens.push(num)
+        } else {
+          // 二元减号
+          tokens.push('-')
+          i++
+        }
+      } else {
+        // 末尾的负号当作二元减号
+        tokens.push('-')
+        i++
+      }
+    }
+    // 数字
+    else if (/\d/.test(char)) {
+      let num = ''
+      while (i < expr.length && /\d/.test(expr[i])) {
+        num += expr[i]
+        i++
+      }
+      tokens.push(num)
+    }
+    // 左括号
+    else if (char === '(') {
+      tokens.push('(')
+      i++
+    }
+    // 右括号
+    else if (char === ')') {
+      tokens.push(')')
+      i++
+    }
+    else {
+      i++
+    }
+  }
+  
+  return tokens
+}
+
+const parseEquation = () => {
+  const eq = inputEquation.value.trim()
+  if (!eq) {
+    equationError.value = '请输入方程'
+    return
+  }
+
+  const parts = eq.split('=')
+  if (parts.length !== 2) {
+    equationError.value = '方程格式错误，请使用 = 分隔左右两边'
+    return
+  }
+
+  const leftExpr = parts[0].trim()
+  const rightExpr = parts[1].trim()
+
+  const leftTokens = parseExpression(leftExpr)
+  const rightTokens = parseExpression(rightExpr)
+
+  if (leftTokens.length === 0 && rightTokens.length === 0) {
+    equationError.value = '方程不能为空'
+    return
+  }
+
+  leftRawTokens.value = leftTokens
+  rightRawTokens.value = rightTokens
+  equationError.value = ''
+  mode.value = 'explore'
+
+  // 计算真实的 x 值（不显示）
+  const left = simplify(leftTokens)
+  const right = simplify(rightTokens)
+
+  // 处理含除法的方程
+  if (left.hasDivision || right.hasDivision) {
+    // 左边有除法，如 8/x = 4
+    if (left.hasDivision && !right.hasDivision) {
+      if (left.divisionType === 'n/x') {
+        // n/x = right => x = n/right
+        solvedXValue.value = left.divisionValue / right.constant
+      } else if (left.divisionType === 'x/n') {
+        // x/n = right => x = right * n
+        solvedXValue.value = right.constant * left.divisionValue
+      }
+    }
+    // 右边有除法，如 4 = 8/x
+    else if (right.hasDivision && !left.hasDivision) {
+      if (right.divisionType === 'n/x') {
+        // left = n/x => x = n/left
+        solvedXValue.value = right.divisionValue / left.constant
+      } else if (right.divisionType === 'x/n') {
+        // left = x/n => x = left * n
+        solvedXValue.value = left.constant * right.divisionValue
+      }
+    }
+    // 两边都有除法
+    else {
+      solvedXValue.value = null
+    }
+  } else {
+    // 普通加减方程
+    // 方程: left.xCount * x + left.constant = right.xCount * x + right.constant
+    // 移项: (left.xCount - right.xCount) * x = right.constant - left.constant
+    const xCoeff = left.xCount - right.xCount
+    const constDiff = right.constant - left.constant
+
+    if (xCoeff === 0) {
+      solvedXValue.value = null
+    } else {
+      solvedXValue.value = constDiff / xCoeff
+    }
+  }
+}
+
+</script>
+
+<style scoped>
+.weight-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 2px solid;
+  border-radius: 8px;
+  user-select: none;
+  transition: all 0.2s ease;
+  min-height: 38px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-size: 14px;
+}
+
+.weight-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.beam-rotate {
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.result-badge {
+  transition: all 0.3s ease;
+}
+
+.drop-zone {
+  transition: all 0.2s ease;
+}
+</style>
