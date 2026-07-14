@@ -1,8 +1,5 @@
 name = "math-visualization"
+compatibility_date = "2026-07-14"
 
-[build]
-command = "npm run build"
-publish = "dist"
-
-[deploy]
-framework = "none"
+[assets]
+directory = "./dist"
