@@ -159,13 +159,6 @@
               <span class="text-xs text-gray-500 ml-1">常数={{ rightConstant }}</span>
             </div>
           </div>
-
-          <!-- 天平状态 -->
-          <div class="result-badge absolute top-4 left-1/2 -translate-x-1/2 px-6 py-2 rounded-full shadow-lg text-lg font-bold transition-all"
-            :class="resultClass">
-            {{ resultText }}
-          </div>
-
         </div>
         
         <!-- 等式显示 -->
@@ -248,16 +241,30 @@
           <span v-else>请选择一个砝码</span>
         </div>
 
-        <div class="grid grid-cols-10 gap-2">
-          <div
-            v-for="(weight, idx) in weights"
-            :key="idx"
-            class="weight-chip cursor-pointer"
-            :class="[getChipClass(weight), selectedWeight === weight ? 'ring-4 ring-purple-400 scale-110' : 'hover:scale-105']"
-            @click="selectWeight(weight)"
-            :title="'选择 ' + weight"
+        <div class="flex flex-col gap-4">
+          <div 
+            v-for="(group, gIdx) in weightGroups" 
+            :key="gIdx" 
+            class="p-4 rounded-xl border-2"
+            :class="getGroupClass(group.color)"
           >
-            <span class="font-mono font-bold">{{ weight }}</span>
+            <div class="flex items-center mb-3">
+              <span class="text-sm font-semibold px-3 py-1 rounded-full" :class="[getGroupTitleClass(group.color), getGroupBadgeBg(group.color)]">
+                {{ group.label }}
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-3">
+              <div
+                v-for="(weight, idx) in group.weights"
+                :key="idx"
+                class="weight-chip cursor-pointer px-4 py-2 transition-all duration-200"
+                :class="selectedWeight === weight ? 'bg-yellow-300 text-yellow-900 border-2 border-yellow-600 scale-110 shadow-lg' : [getChipClass(weight), 'hover:scale-105']"
+                @click="selectWeight(weight)"
+                :title="'选择 ' + weight"
+              >
+                <span class="font-mono font-bold text-sm">{{ weight }}</span>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -278,12 +285,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 
-const weights = [
-  'x', '-x',
-  '+', '-', '*', '/',
-  '1', '2', '3', '4', '5', '6', '7', '8', '9',
-  '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9'
+const weightGroups = [
+  { op: '+', label: '加法砝码', color: 'green', weights: ['+x', '+0', '+1', '+2', '+3', '+4', '+5', '+6', '+7', '+8', '+9'] },
+  { op: '-', label: '减法砝码', color: 'red', weights: ['-x', '-0', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9'] },
+  { op: '*', label: '乘法砝码', color: 'blue', weights: ['*x', '*0', '*1', '*2', '*3', '*4', '*5', '*6', '*7', '*8', '*9'] },
+  { op: '/', label: '除法砝码', color: 'orange', weights: ['/x', '/0', '/1', '/2', '/3', '/4', '/5', '/6', '/7', '/8', '/9'] }
 ]
+
+const weights = weightGroups.flatMap(g => g.weights)
 
 const leftRawTokens = ref([])  // 原始输入顺序
 const rightRawTokens = ref([])
@@ -307,16 +316,48 @@ const selectWeight = (weight) => {
   }
 }
 
+// 将带运算符前缀的砝码转换为标准 tokens
+const parseWeightToTokens = (weight) => {
+  if (typeof weight !== 'string') return [weight]
+  
+  if (weight.startsWith('+')) {
+    const val = weight.substring(1)
+    if (val === '0') return []
+    return [val]
+  }
+  
+  if (weight.startsWith('-')) {
+    const val = weight.substring(1)
+    if (val === '0') return []
+    return [weight]
+  }
+  
+  if (weight.startsWith('*')) {
+    const val = weight.substring(1)
+    if (val === '0') return []
+    return ['*', val]
+  }
+  
+  if (weight.startsWith('/')) {
+    const val = weight.substring(1)
+    return ['/', val]
+  }
+  
+  return [weight]
+}
+
 // 点击托盘添加砝码
 const handleTrayClick = (side) => {
   if (!selectedWeight.value) return
   const weight = selectedWeight.value
+  const tokens = parseWeightToTokens(weight)
+  if (tokens.length === 0) return
+  
   if (side === 'left') {
-    leftRawTokens.value = [...leftRawTokens.value, weight]
+    leftRawTokens.value = [...leftRawTokens.value, ...tokens]
   } else {
-    rightRawTokens.value = [...rightRawTokens.value, weight]
+    rightRawTokens.value = [...rightRawTokens.value, ...tokens]
   }
-  // 添加后保持选中状态，方便连续添加
 }
 
 // 解析一个 token 的类型和值
@@ -964,7 +1005,6 @@ const checkAnswer = () => {
 }
 
 const getChipClass = (token) => {
-  // token 可能是字符串（原始砝码区）或对象（简化后的）
   let value = token
   if (typeof token === 'object' && token !== null && token.display !== undefined) {
     value = token.display
@@ -976,13 +1016,56 @@ const getChipClass = (token) => {
   if (['+', '-', '*', '/'].includes(value)) {
     return 'bg-blue-200 text-blue-900 border-blue-400 cursor-grab'
   }
-  if (typeof value === 'string' && value.startsWith('-')) {
-    return 'bg-red-100 text-red-800 border-red-300 cursor-grab'
+  if (typeof value === 'string') {
+    if (value.startsWith('-')) {
+      if (value === '-x') return 'bg-purple-200 text-purple-900 border-purple-400 cursor-grab'
+      return 'bg-red-100 text-red-800 border-red-300 cursor-grab'
+    }
+    if (value.startsWith('+')) {
+      if (value === '+x') return 'bg-purple-200 text-purple-900 border-purple-400 cursor-grab'
+      return 'bg-green-100 text-green-800 border-green-300 cursor-grab'
+    }
+    if (value.startsWith('*')) {
+      return 'bg-blue-100 text-blue-800 border-blue-300 cursor-grab'
+    }
+    if (value.startsWith('/')) {
+      return 'bg-orange-100 text-orange-800 border-orange-300 cursor-grab'
+    }
   }
   if (typeof value === 'number' && value < 0) {
     return 'bg-red-100 text-red-800 border-red-300 cursor-grab'
   }
   return 'bg-green-100 text-green-800 border-green-300 cursor-grab'
+}
+
+const getGroupClass = (color) => {
+  const classes = {
+    green: 'bg-green-50 border-green-200',
+    red: 'bg-red-50 border-red-200',
+    blue: 'bg-blue-50 border-blue-200',
+    orange: 'bg-orange-50 border-orange-200'
+  }
+  return classes[color] || 'bg-gray-50 border-gray-200'
+}
+
+const getGroupTitleClass = (color) => {
+  const classes = {
+    green: 'text-green-700',
+    red: 'text-red-700',
+    blue: 'text-blue-700',
+    orange: 'text-orange-700'
+  }
+  return classes[color] || 'text-gray-700'
+}
+
+const getGroupBadgeBg = (color) => {
+  const classes = {
+    green: 'bg-green-100',
+    red: 'bg-red-100',
+    blue: 'bg-blue-100',
+    orange: 'bg-orange-100'
+  }
+  return classes[color] || 'bg-gray-100'
 }
 
 const removeFromTray = (side, idx) => {
