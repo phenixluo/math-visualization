@@ -346,18 +346,132 @@ const parseWeightToTokens = (weight) => {
   return [weight]
 }
 
+// 判断是否需要用括号包裹
+const needsParenWrap = (tokens) => {
+  if (tokens.length < 2) return false
+  if (tokens[0] === '(' && tokens[tokens.length - 1] === ')') return false
+  return tokens.some(t => t === '+' || t === '-')
+}
+
 // 点击托盘添加砝码
 const handleTrayClick = (side) => {
   if (!selectedWeight.value) return
   const weight = selectedWeight.value
   const tokens = parseWeightToTokens(weight)
   if (tokens.length === 0) return
-  
+
+  const targetTokens = side === 'left' ? leftRawTokens.value : rightRawTokens.value
+
+  // 如果添加的是乘除运算符，且当前托盘有加减表达式，自动添加括号
+  if (tokens.length > 0 && (tokens[0] === '*' || tokens[0] === '/')) {
+    if (targetTokens.length > 0 && needsParenWrap(targetTokens)) {
+      const wrapped = ['(', ...targetTokens, ')']
+      if (side === 'left') {
+        leftRawTokens.value = [...wrapped, ...tokens]
+      } else {
+        rightRawTokens.value = [...wrapped, ...tokens]
+      }
+      return
+    }
+  }
+
   if (side === 'left') {
     leftRawTokens.value = [...leftRawTokens.value, ...tokens]
   } else {
     rightRawTokens.value = [...rightRawTokens.value, ...tokens]
   }
+}
+
+// 括号相关辅助函数
+const findMatchingParen = (tokens, startIdx) => {
+  let depth = 1
+  for (let i = startIdx + 1; i < tokens.length; i++) {
+    if (tokens[i] === '(') depth++
+    if (tokens[i] === ')') depth--
+    if (depth === 0) return i
+  }
+  return -1
+}
+
+const removeOuterParens = (tokens) => {
+  if (tokens.length < 3 || tokens[0] !== '(' || tokens[tokens.length - 1] !== ')') {
+    return tokens
+  }
+  let depth = 0
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === '(') depth++
+    if (tokens[i] === ')') depth--
+    if (depth === 0 && i < tokens.length - 1) {
+      return tokens
+    }
+  }
+  return tokens.slice(1, -1)
+}
+
+const evaluateGroup = (tokens) => {
+  let xCount = 0
+  let constant = 0
+  let sign = 1
+  for (let j = 0; j < tokens.length; j++) {
+    const t = tokens[j]
+    if (t === '+') { sign = 1; continue }
+    if (t === '-') { sign = -1; continue }
+    const parsed = parseToken(t)
+    if (parsed.type === 'x') {
+      xCount += sign * parsed.coeff
+    } else if (parsed.type === 'num') {
+      constant += sign * parsed.num
+    }
+    sign = 1
+  }
+  return { xCount, constant }
+}
+
+const processParenCancel = (tokens) => {
+  const result = []
+  let i = 0
+  while (i < tokens.length) {
+    const t = tokens[i]
+    if (t === '(') {
+      const endIdx = findMatchingParen(tokens, i)
+      if (endIdx !== -1) {
+        const groupTokens = tokens.slice(i + 1, endIdx)
+        const groupValue = evaluateGroup(groupTokens)
+        // 检查前一个项是否可抵消
+        if (result.length > 0) {
+          const prev = result[result.length - 1]
+          const prevParsed = parseToken(prev)
+          if (groupValue.xCount === 0 && prevParsed.type === 'num') {
+            if (prevParsed.num + groupValue.constant === 0) {
+              result.pop()
+              i = endIdx + 1
+              continue
+            }
+          }
+        }
+        // 检查后一个项是否可抵消
+        if (endIdx + 1 < tokens.length) {
+          const next = tokens[endIdx + 1]
+          const nextParsed = parseToken(next)
+          if (groupValue.xCount === 0 && nextParsed.type === 'num') {
+            if (groupValue.constant + nextParsed.num === 0) {
+              i = endIdx + 2
+              continue
+            }
+          }
+        }
+        result.push(t)
+        i++
+      } else {
+        result.push(t)
+        i++
+      }
+    } else {
+      result.push(t)
+      i++
+    }
+  }
+  return result
 }
 
 // 解析一个 token 的类型和值
@@ -382,20 +496,47 @@ const parseToken = (t) => {
 
 // 简化表达式：处理加减乘除，计算x系数和常数项
 const simplify = (tokens) => {
-  // 先处理乘除运算（优先级高于加减）
+  if (!tokens || tokens.length === 0) {
+    return { tokens: [], xCount: 0, constant: 0, hasDivision: false, divisionType: '', divisionValue: 0, display: '0' }
+  }
+
+  // 1. 处理括号消失
+  let currentTokens = removeOuterParens([...tokens])
+
+  // 2. 处理括号内整体抵消
+  currentTokens = processParenCancel(currentTokens)
+
+  // 3. 处理乘除运算（括号作为整体）
   let processed = []
   let i = 0
-  while (i < tokens.length) {
-    const t = tokens[i]
+  while (i < currentTokens.length) {
+    const t = currentTokens[i]
+
+    if (t === '(') {
+      const endIdx = findMatchingParen(currentTokens, i)
+      if (endIdx !== -1) {
+        for (let k = i; k <= endIdx; k++) processed.push(currentTokens[k])
+        i = endIdx + 1
+        continue
+      }
+    }
+
     if (t === '*' || t === '/') {
-      // 取前一个和后一个元素
       const prev = processed.pop()
-      const next = tokens[i + 1]
-      if (prev === undefined || next === undefined || next === '/' || next === '*') {
-        // 无效状态，退回
+      const next = currentTokens[i + 1]
+
+      if (prev === undefined || next === undefined || next === '*' || next === '/') {
         if (prev !== undefined) processed.push(prev)
         processed.push(t)
-        if (next !== undefined && next !== '*' && next !== '/') {
+        i++
+        continue
+      }
+
+      // 如果 prev 或 next 是括号，保留原样
+      if (prev === '(' || next === '(') {
+        processed.push(prev)
+        processed.push(t)
+        if (next !== '*' && next !== '/') {
           processed.push(next)
           i += 2
         } else {
@@ -404,7 +545,6 @@ const simplify = (tokens) => {
         continue
       }
 
-      // 解析左右操作数
       const left = parseToken(prev)
       const right = parseToken(next)
 
@@ -416,7 +556,6 @@ const simplify = (tokens) => {
       }
 
       if (t === '*') {
-        // 乘法
         if (left.type === 'num' && right.type === 'num') {
           processed.push(String(left.num * right.num))
         } else if ((left.type === 'num' && right.type === 'x') || (left.type === 'x' && right.type === 'num')) {
@@ -426,33 +565,13 @@ const simplify = (tokens) => {
           if (c === 1) processed.push('x')
           else if (c === -1) processed.push('-x')
           else processed.push(c + 'x')
-        } else if (left.type === 'x' && right.type === 'x') {
-          // x * x 复杂，保留
-          processed.push(prev)
-          processed.push(t)
         } else if (left.type === 'n/x' && right.type === 'x') {
-          // n/x * x = n
           processed.push(String(left.num))
-        } else if (left.type === 'x/n' && right.type === 'x') {
-          // x/n * x = x²/n，保留为 x*x/n
-          processed.push(prev)
-          processed.push(t)
         } else if (left.type === 'x' && right.type === 'n/x') {
-          // x * n/x = n
           processed.push(String(right.num))
-        } else if (left.type === 'x' && right.type === 'x/n') {
-          // x * x/n = x²/n，保留为 x*x/n
-          processed.push(prev)
-          processed.push(t)
-        } else if (left.type === 'n/x' && right.type === 'n/x') {
-          // n/x * m/x = n*m/x²，保留
-          processed.push(prev)
-          processed.push(t)
         } else if (left.type === 'n/x' && right.type === 'num') {
-          // n/x * num = (n*num)/x
           processed.push((left.num * right.num) + '/x')
         } else if (left.type === 'num' && right.type === 'n/x') {
-          // num * n/x = (num*n)/x
           processed.push((left.num * right.num) + '/x')
         } else {
           processed.push(prev)
@@ -460,22 +579,16 @@ const simplify = (tokens) => {
         }
         i += 2
       } else if (t === '/') {
-        // 除法
         if (left.type === 'num' && right.type === 'num') {
           if (right.num === 0) {
             processed.push(prev)
             processed.push(t)
           } else {
             const result = left.num / right.num
-            if (Number.isInteger(result)) {
-              processed.push(String(result))
-            } else {
-              processed.push(prev)
-              processed.push(t)
-            }
+            if (Number.isInteger(result)) processed.push(String(result))
+            else { processed.push(prev); processed.push(t) }
           }
         } else if (left.type === 'x' && right.type === 'num') {
-          // nx / n  -> 7x / 7 = x
           if (right.num === 0) {
             processed.push(prev)
             processed.push(t)
@@ -488,22 +601,13 @@ const simplify = (tokens) => {
             processed.push('x/' + right.num)
           }
         } else if (left.type === 'num' && right.type === 'x') {
-          // n / x
           processed.push(left.num + '/x')
         } else if (left.type === 'x' && right.type === 'x') {
-          // nx / x = n
           if (right.coeff !== 0) {
             const result = left.coeff / right.coeff
-            if (Number.isInteger(result)) {
-              processed.push(String(result))
-            } else {
-              processed.push(prev)
-              processed.push(t)
-            }
-          } else {
-            processed.push(prev)
-            processed.push(t)
-          }
+            if (Number.isInteger(result)) processed.push(String(result))
+            else { processed.push(prev); processed.push(t) }
+          } else { processed.push(prev); processed.push(t) }
         } else {
           processed.push(prev)
           processed.push(t)
@@ -516,23 +620,31 @@ const simplify = (tokens) => {
     }
   }
 
-  // 然后处理加减运算（处理正负号 + - 前缀）
+  // 4. 处理加减运算（括号作为整体）
   let xCount = 0
   let constant = 0
   let hasDivision = false
-  let divisionType = ''  // 'n/x' 或 'x/n'
+  let divisionType = ''
   let divisionValue = 0
-  let sign = 1  // 当前符号
+  let sign = 1
 
-  for (let j = 0; j < processed.length; j++) {
+  let j = 0
+  while (j < processed.length) {
     const t = processed[j]
-    if (t === '+') {
-      sign = 1
-      continue
-    }
-    if (t === '-') {
-      sign = -1
-      continue
+    if (t === '+') { sign = 1; j++; continue }
+    if (t === '-') { sign = -1; j++; continue }
+
+    if (t === '(') {
+      const endIdx = findMatchingParen(processed, j)
+      if (endIdx !== -1) {
+        const innerTokens = processed.slice(j + 1, endIdx)
+        const inner = simplify(innerTokens)
+        xCount += sign * inner.xCount
+        constant += sign * inner.constant
+        sign = 1
+        j = endIdx + 1
+        continue
+      }
     }
 
     const parsed = parseToken(t)
@@ -549,22 +661,17 @@ const simplify = (tokens) => {
     } else if (parsed.type === 'num') {
       constant += sign * parsed.num
     }
-    sign = 1  // 处理完一个操作数后重置符号
+    sign = 1
+    j++
   }
 
+  // 5. 生成 tokens2
   const tokens2 = []
   if (hasDivision) {
-    if (divisionType === 'n/x') {
-      tokens2.push(divisionValue + '/x')
-    } else if (divisionType === 'x/n') {
-      tokens2.push('x/' + divisionValue)
-    }
-    // 加上常数项
-    if (constant > 0) {
-      tokens2.push('+' + constant)
-    } else if (constant < 0) {
-      tokens2.push(String(constant))
-    }
+    if (divisionType === 'n/x') tokens2.push(divisionValue + '/x')
+    else if (divisionType === 'x/n') tokens2.push('x/' + divisionValue)
+    if (constant > 0) tokens2.push('+' + constant)
+    else if (constant < 0) tokens2.push(String(constant))
   } else {
     if (xCount > 0) {
       if (xCount === 1) tokens2.push('x')
@@ -573,7 +680,6 @@ const simplify = (tokens) => {
       if (xCount === -1) tokens2.push('-x')
       else tokens2.push(xCount + 'x')
     }
-
     if (constant > 0) {
       if (tokens2.length > 0) tokens2.push('+' + constant)
       else tokens2.push(String(constant))
@@ -910,7 +1016,7 @@ const simplifyResultToTokens = (simplified) => {
   return result
 }
 
-// watch tokens 变化：处理 challenge 模式 + 自动简化（当表达式完整时可消除砝码）
+// watch tokens 变化：处理 challenge 模式 + 括号消失
 let isAutoSimplifying = false  // 防止递归触发
 watch([leftRawTokens, rightRawTokens], () => {
   if (isAutoSimplifying) return
@@ -924,21 +1030,18 @@ watch([leftRawTokens, rightRawTokens], () => {
     }
   }
 
-  // 左边自动简化：只有当表达式完整且简化后长度更短时才更新
+  // 处理括号消失：括号外无运算时，括号自动消失
   if (isExpressionComplete(leftRawTokens.value)) {
-    const leftSimplified = simplify(leftRawTokens.value)
-    const leftTokens = simplifyResultToTokens(leftSimplified)
-    if (leftTokens.length > 0 && leftTokens.length < leftRawTokens.value.length) {
-      leftRawTokens.value = leftTokens
+    const simplified = removeOuterParens([...leftRawTokens.value])
+    if (simplified.length !== leftRawTokens.value.length) {
+      leftRawTokens.value = simplified
     }
   }
 
-  // 右边自动简化
   if (isExpressionComplete(rightRawTokens.value)) {
-    const rightSimplified = simplify(rightRawTokens.value)
-    const rightTokens = simplifyResultToTokens(rightSimplified)
-    if (rightTokens.length > 0 && rightTokens.length < rightRawTokens.value.length) {
-      rightRawTokens.value = rightTokens
+    const simplified = removeOuterParens([...rightRawTokens.value])
+    if (simplified.length !== rightRawTokens.value.length) {
+      rightRawTokens.value = simplified
     }
   }
 
@@ -952,42 +1055,24 @@ const setChallengeMode = () => {
   studentAnswer.value = null
   answerFeedback.value = ''
   showXResult.value = false
-  
+
   const challenges = [
     { left: 'x + 3', right: '8' },
     { left: 'x + 5', right: '12' },
     { left: 'x - 2', right: '7' },
     { left: '3 - x', right: '2' },
+    { left: '(x + 3) + 2', right: '7' },
+    { left: '2 * (x - 1)', right: '8' },
+    { left: '(2 + 3) * x', right: '25' },
+    { left: '(x + 2) * 3', right: '15' },
   ]
-  
+
   const challenge = challenges[Math.floor(Math.random() * challenges.length)]
-  
+
   // 根据目标方程设置初始状态
-  leftRawTokens.value = []
-  rightRawTokens.value = []
-  
-  // 解析左边
-  if (challenge.left.includes('x')) {
-    const parts = challenge.left.split('x')
-    if (parts[0] === '' || parts[0] === '+') {
-      leftRawTokens.value.push('x')
-    } else if (parts[0] === '-') {
-      leftRawTokens.value.push('-x')
-    } else {
-      leftRawTokens.value.push(parts[0].replace('+', '') + 'x')
-    }
-    const num = parts[1].match(/[+-]?\d+/)?.[0]
-    if (num) {
-      leftRawTokens.value.push(num)
-    }
-  }
-  
-  // 解析右边
-  const rightNum = challenge.right.match(/[+-]?\d+/)?.[0]
-  if (rightNum) {
-    rightRawTokens.value.push(rightNum)
-  }
-  
+  leftRawTokens.value = parseExpression(challenge.left)
+  rightRawTokens.value = parseExpression(challenge.right)
+
   challengeEquation.value = challenge
 }
 
@@ -1015,6 +1100,9 @@ const getChipClass = (token) => {
   }
   if (['+', '-', '*', '/'].includes(value)) {
     return 'bg-blue-200 text-blue-900 border-blue-400 cursor-grab'
+  }
+  if (value === '(' || value === ')') {
+    return 'bg-gray-300 text-gray-700 border-gray-500 cursor-default px-2'
   }
   if (typeof value === 'string') {
     if (value.startsWith('-')) {
