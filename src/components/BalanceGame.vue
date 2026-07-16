@@ -94,9 +94,10 @@
               @mouseenter="isDragOver = selectedWeight ? 'left' : null"
               @mouseleave="isDragOver = null"
             >
+              <TransitionGroup name="token" tag="div" class="flex flex-wrap gap-1">
               <div
                 v-for="(token, idx) in leftRawTokensDisplay"
-                :key="'left-' + idx"
+                :key="token.id"
                 class="weight-chip"
                 :class="getChipClass(token)"
                 @click.stop="removeFromTray('left', idx)"
@@ -104,9 +105,10 @@
               >
                 <span class="font-mono font-bold">{{ token.display }}</span>
               </div>
-              <div v-if="leftRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
-                点击添加
-              </div>
+            </TransitionGroup>
+            <div v-if="leftRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
+              点击添加
+            </div>
             </div>
             <div class="mt-2 text-center font-mono text-sm bg-blue-50 rounded px-2 py-1">
               <span class="text-xs text-gray-500">化简：</span>
@@ -139,9 +141,10 @@
               @mouseenter="isDragOver = selectedWeight ? 'right' : null"
               @mouseleave="isDragOver = null"
             >
+              <TransitionGroup name="token" tag="div" class="flex flex-wrap gap-1">
               <div
                 v-for="(token, idx) in rightRawTokensDisplay"
-                :key="'right-' + idx"
+                :key="token.id"
                 class="weight-chip"
                 :class="getChipClass(token)"
                 @click.stop="removeFromTray('right', idx)"
@@ -149,9 +152,10 @@
               >
                 <span class="font-mono font-bold">{{ token.display }}</span>
               </div>
-              <div v-if="rightRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
-                点击添加
-              </div>
+            </TransitionGroup>
+            <div v-if="rightRawTokensDisplay.length === 0" class="text-gray-400 text-xs w-full text-center py-3">
+              点击添加
+            </div>
             </div>
             <div class="mt-2 text-center font-mono text-sm bg-red-50 rounded px-2 py-1">
               <span class="text-xs text-gray-500">化简：</span>
@@ -323,13 +327,13 @@ const parseWeightToTokens = (weight) => {
   if (weight.startsWith('+')) {
     const val = weight.substring(1)
     if (val === '0') return []
-    return [val]
+    return ['+', val]
   }
   
   if (weight.startsWith('-')) {
     const val = weight.substring(1)
     if (val === '0') return []
-    return [weight]
+    return ['-', val]
   }
   
   if (weight.startsWith('*')) {
@@ -472,6 +476,143 @@ const processParenCancel = (tokens) => {
     }
   }
   return result
+}
+
+// 处理加减抵消和计算（如 8-2 → 6，2-2 → 消失，6+x-6 → x）
+// 注意：不处理括号内的内容，只处理括号外的运算
+const processAddSubCancel = (tokens) => {
+  if (tokens.length === 0) return tokens
+
+  const result = [...tokens]
+
+  // 扫描表达式，只处理括号外的运算
+  let changed = true
+  while (changed) {
+    changed = false
+
+    // 第一趟：处理相邻的同类型项（数字和数字，x和x）
+    for (let i = 0; i < result.length; i++) {
+      const op = result[i]
+      if (op !== '+' && op !== '-') continue
+
+      // 检查是否在括号内（跳过括号内的运算）
+      let depth = 0
+      for (let j = 0; j < i; j++) {
+        if (result[j] === '(') depth++
+        if (result[j] === ')') depth--
+      }
+      if (depth > 0) continue
+
+      // 检查两边是否都是数字或x项
+      if (i > 0 && i + 1 < result.length) {
+        const leftIdx = i - 1
+        const rightIdx = i + 1
+        const left = parseToken(result[leftIdx])
+        const right = parseToken(result[rightIdx])
+
+        // 数字加减计算（8-2 → 6）
+        if (left.type === 'num' && right.type === 'num') {
+          const sign = op === '+' ? 1 : -1
+          const sum = left.num + sign * right.num
+          result.splice(leftIdx, 3, String(sum))
+          changed = true
+          break
+        }
+
+        // x 项抵消（-x + x = 0）
+        if (left.type === 'x' && right.type === 'x') {
+          const sign = op === '+' ? 1 : -1
+          const totalCoeff = left.coeff + sign * right.coeff
+          if (totalCoeff === 0) {
+            result.splice(leftIdx, 3, '0')
+          } else if (totalCoeff === 1) {
+            result.splice(leftIdx, 3, 'x')
+          } else if (totalCoeff === -1) {
+            result.splice(leftIdx, 3, '-x')
+          } else {
+            result.splice(leftIdx, 3, String(totalCoeff) + 'x')
+          }
+          changed = true
+          break
+        }
+      }
+    }
+
+    // 第二趟：处理跨过 x 项的数字抵消（如 6+x-6 → x）
+    if (!changed) {
+      for (let i = 0; i < result.length; i++) {
+        const op = result[i]
+        if (op !== '+' && op !== '-') continue
+
+        // 检查是否在括号内
+        let depth = 0
+        for (let j = 0; j < i; j++) {
+          if (result[j] === '(') depth++
+          if (result[j] === ')') depth--
+        }
+        if (depth > 0) continue
+
+        if (i > 0 && i + 1 < result.length) {
+          const leftIdx = i - 1
+          const rightIdx = i + 1
+          const left = parseToken(result[leftIdx])
+          const right = parseToken(result[rightIdx])
+
+          // 模式：num + x - num 或 num - x + num
+          if (left.type === 'num' && right.type === 'x') {
+            // 找到 x 后面的数字和运算符
+            let j = rightIdx + 1
+            while (j < result.length && (result[j] === '+' || result[j] === '-')) j++
+            if (j < result.length) {
+              const op2 = j > 0 ? result[j - 1] : '+'
+              const nextToken = parseToken(result[j])
+              if (nextToken.type === 'num') {
+                // 计算：left + op*x + op2*nextToken
+                // 只合并数字部分：left + (op * op2) * nextToken
+                const sign1 = op === '+' ? 1 : -1
+                const sign2 = op2 === '+' ? 1 : -1
+                const combinedSign = sign1 * sign2
+                const sum = left.num + combinedSign * nextToken.num
+
+                // 替换：移除 left + op + x + op2 + nextToken，保留 x 和计算结果
+                // 如果 sum 不为 0，保留 sum；否则只保留 x
+                if (sum !== 0) {
+                  result.splice(leftIdx, j - leftIdx + 1, String(sum), op, 'x')
+                } else {
+                  result.splice(leftIdx, j - leftIdx + 1, 'x')
+                }
+                changed = true
+                break
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 第一趟：移除非开头的 0
+  const noZero = []
+  for (let i = 0; i < result.length; i++) {
+    const t = result[i]
+    if (t === '0' && i > 0) continue
+    noZero.push(t)
+  }
+
+  // 第二趟：清理悬空的运算符（后面没有有效操作数的运算符）
+  const filtered = []
+  for (let i = 0; i < noZero.length; i++) {
+    const t = noZero[i]
+    if (t === '+' || t === '-') {
+      const next = noZero[i + 1]
+      if (!next || next === '+' || next === '-' || next === '*' || next === '/' || next === ')') {
+        continue
+      }
+    }
+    filtered.push(t)
+  }
+
+  return filtered
 }
 
 // 解析一个 token 的类型和值
@@ -704,14 +845,16 @@ const simplifiedRight = computed(() => simplify(rightRawTokens.value))
 
 // 托盘显示信息：显示原始砝码，当自动简化触发时会更新
 const leftRawTokensDisplay = computed(() => {
-  return leftRawTokens.value.map(t => ({
+  return leftRawTokens.value.map((t, idx) => ({
+    id: `l-${idx}-${t}-${Date.now()}`,
     display: t,
     coeff: t === 'x' ? 1 : (t === '-x' ? -1 : parseInt(t) || t)
   }))
 })
 
 const rightRawTokensDisplay = computed(() => {
-  return rightRawTokens.value.map(t => ({
+  return rightRawTokens.value.map((t, idx) => ({
+    id: `r-${idx}-${t}-${Date.now()}`,
     display: t,
     coeff: t === 'x' ? 1 : (t === '-x' ? -1 : parseInt(t) || t)
   }))
@@ -1030,17 +1173,21 @@ watch([leftRawTokens, rightRawTokens], () => {
     }
   }
 
-  // 处理括号消失：括号外无运算时，括号自动消失
+  // 处理括号相关逻辑：整体抵消、加减抵消、括号消失
   if (isExpressionComplete(leftRawTokens.value)) {
-    const simplified = removeOuterParens([...leftRawTokens.value])
-    if (simplified.length !== leftRawTokens.value.length) {
+    let simplified = processParenCancel([...leftRawTokens.value])
+    simplified = processAddSubCancel(simplified)
+    simplified = removeOuterParens(simplified)
+    if (JSON.stringify(simplified) !== JSON.stringify(leftRawTokens.value)) {
       leftRawTokens.value = simplified
     }
   }
 
   if (isExpressionComplete(rightRawTokens.value)) {
-    const simplified = removeOuterParens([...rightRawTokens.value])
-    if (simplified.length !== rightRawTokens.value.length) {
+    let simplified = processParenCancel([...rightRawTokens.value])
+    simplified = processAddSubCancel(simplified)
+    simplified = removeOuterParens(simplified)
+    if (JSON.stringify(simplified) !== JSON.stringify(rightRawTokens.value)) {
       rightRawTokens.value = simplified
     }
   }
@@ -1366,5 +1513,20 @@ const parseEquation = () => {
 
 .drop-zone {
   transition: all 0.2s ease;
+}
+
+.token-enter-active,
+.token-leave-active {
+  transition: all 0.5s ease;
+}
+
+.token-enter-from,
+.token-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.token-move {
+  transition: transform 0.3s ease;
 }
 </style>
