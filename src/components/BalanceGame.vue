@@ -150,7 +150,7 @@ const balanceAreaRef = ref(null)
 const containerWidth = ref(1152)
 
 // 横梁配置
-const beamWidth = 600
+const beamWidth = 640
 const halfBeam = beamWidth / 2
 
 function updateContainerWidth() {
