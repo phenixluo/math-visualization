@@ -45,7 +45,7 @@ const currentTab = ref('modeler')
 
 const tabs = [
   { id: 'function', name: '函数图像' },
-  { id: 'modeler', name: '几何建模' },
+  { id: 'modeler', name: '点-线-面-立体' },
   { id: '3d', name: '3D图形' },
   { id: 'formula', name: '公式推导' },
   { id: 'balance', name: '方程图形化' }
