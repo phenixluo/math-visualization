@@ -55,6 +55,16 @@
         </div>
       </div>
 
+      <!-- 中间比较符号框 -->
+      <div
+        class="absolute left-1/2 top-[160px] -translate-x-1/2 transition-all duration-700 ease-out"
+        :style="{ transform: `translateX(-50%) translateY(${Math.abs(Math.sin(beamAngleRad)) * 30}px)` }"
+      >
+        <div class="w-[80px] h-[60px] bg-gradient-to-b from-amber-100 to-amber-200 border-2 border-amber-500 rounded-lg flex items-center justify-center shadow-lg">
+          <span class="text-4xl font-bold" :class="comparisonColor">{{ comparisonSymbol }}</span>
+        </div>
+      </div>
+
       <!-- 右侧托盘 -->
       <div
         class="absolute right-[80px] top-[160px] transition-transform duration-700 ease-out"
@@ -224,6 +234,41 @@ const beamAngleDeg = computed(() => {
 
   const beamAngleRad = computed(() => beamAngleDeg.value * Math.PI / 180)
 
+  const comparisonSymbol = computed(() => {
+    const left = leftExpr.value
+    const right = rightExpr.value
+
+    if (!left || !right) return '='
+
+    try {
+      const leftNormalized = left.replace(/×/g, '*').replace(/÷/g, '/')
+      const rightNormalized = right.replace(/×/g, '*').replace(/÷/g, '/')
+
+      const leftEval = mathjs.evaluate(leftNormalized, { x: initialX.value })
+      const rightEval = mathjs.evaluate(rightNormalized, { x: initialX.value })
+
+      const leftWeight = parseFloat(mathjs.number(leftEval))
+      const rightWeight = parseFloat(mathjs.number(rightEval))
+
+      if (isNaN(leftWeight) || isNaN(rightWeight)) return '='
+
+      const diff = leftWeight - rightWeight
+      if (Math.abs(diff) < 0.001) return '='
+      return diff > 0 ? '>' : '<'
+    } catch (e) {
+      return '='
+    }
+  })
+
+  const comparisonColor = computed(() => {
+    switch (comparisonSymbol.value) {
+      case '=': return 'text-green-600'
+      case '>': return 'text-blue-600'
+      case '<': return 'text-red-600'
+      default: return 'text-gray-600'
+    }
+  })
+
   const leftRopeStyle = computed(() => {
     const angle = beamAngleRad.value
     const cw = containerWidth.value
@@ -392,9 +437,6 @@ function handleTrayClick(side) {
   } else {
     rightExpr.value = simplify(`${rightExpr.value}${op}${weight.value}`)
   }
-
-  // 清除选择
-  selectedWeight.value = null
 }
 
 // 简化表达式
