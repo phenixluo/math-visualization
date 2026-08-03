@@ -91,28 +91,51 @@
           <!-- 直接乘法 / 展开模式：展开后散放动物 -->
           <template v-if="currentMode === 'multiply' || currentMode === 'expand'">
             <TransitionGroup name="animal" tag="div" class="flex flex-col gap-3">
-              <!-- 展开模式：分类显示 -->
+              <!-- 展开模式：鸡和鸭各自分组显示（3×2 + 3×5） -->
               <template v-if="currentMode === 'expand'">
-                <div v-if="openedBaskets.length > 0" key="chicken-row" class="flex flex-wrap gap-2 justify-center">
-                  <span v-for="(n, idx) in totalChickens" :key="'tc'+idx" class="animal">🐔</span>
-                  <div class="w-full text-center text-sm text-amber-300">
-                    🐔 {{ chickenPerBasket }} × {{ openedBaskets.length }} = {{ totalChickens }}
+                <!-- 鸡组：openedBaskets.length 组，每组 chickenPerBasket 只 -->
+                <div v-if="openedBaskets.length > 0" key="chicken-block" class="w-full">
+                  <div class="text-xs text-amber-300 mb-1 text-center">
+                    🐔 {{ openedBaskets.length }}×{{ chickenPerBasket }} = {{ totalChickens }}
+                  </div>
+                  <div class="flex flex-wrap gap-2 justify-center">
+                    <div v-for="b in openedBaskets" :key="'cg-'+b" class="basket-group">
+                      <div class="flex flex-wrap gap-1 justify-center max-w-[80px]">
+                        <span v-for="n in chickenPerBasket" :key="'cc'+b+'-'+n" class="animal">🐔</span>
+                      </div>
+                      <div class="text-xs text-amber-300 mt-1 text-center">第{{ b }}组</div>
+                    </div>
                   </div>
                 </div>
-                <div v-if="openedBaskets.length > 0" key="duck-row" class="flex flex-wrap gap-2 justify-center">
-                  <span v-for="(n, idx) in totalDucks" :key="'td'+idx" class="animal">🦆</span>
-                  <div class="w-full text-center text-sm text-amber-300">
-                    🦆 {{ duckPerBasket }} × {{ openedBaskets.length }} = {{ totalDucks }}
+                <!-- 加号分隔 -->
+                <div v-if="openedBaskets.length > 0" key="plus-sign" class="w-full text-center text-2xl font-bold text-green-400">+</div>
+                <!-- 鸭组：openedBaskets.length 组，每组 duckPerBasket 只 -->
+                <div v-if="openedBaskets.length > 0" key="duck-block" class="w-full">
+                  <div class="text-xs text-amber-300 mb-1 text-center">
+                    🦆 {{ openedBaskets.length }}×{{ duckPerBasket }} = {{ totalDucks }}
+                  </div>
+                  <div class="flex flex-wrap gap-2 justify-center">
+                    <div v-for="b in openedBaskets" :key="'dg-'+b" class="basket-group">
+                      <div class="flex flex-wrap gap-1 justify-center max-w-[80px]">
+                        <span v-for="n in duckPerBasket" :key="'dd'+b+'-'+n" class="animal">🦆</span>
+                      </div>
+                      <div class="text-xs text-amber-300 mt-1 text-center">第{{ b }}组</div>
+                    </div>
                   </div>
                 </div>
               </template>
-              <!-- 直接乘法：全部一种动物 -->
+              <!-- 直接乘法：按篮子分组显示 -->
               <template v-else>
-                <div v-if="openedBaskets.length > 0" key="chicken-row" class="flex flex-wrap gap-2 justify-center">
-                  <span v-for="(n, idx) in totalChickens" :key="'tc'+idx" class="animal">🐔</span>
-                  <div class="w-full text-center text-sm text-amber-300">
-                    🐔 {{ chickenPerBasket }} × {{ openedBaskets.length }} = {{ totalChickens }}
+                <div v-if="openedBaskets.length > 0" key="basket-groups" class="flex flex-wrap gap-3 justify-center">
+                  <div v-for="b in openedBaskets" :key="'bg-'+b" class="basket-group">
+                    <div class="flex flex-wrap gap-1 justify-center max-w-[80px]">
+                      <span v-for="n in chickenPerBasket" :key="'bc'+b+'-'+n" class="animal">🐔</span>
+                    </div>
+                    <div class="text-xs text-amber-300 mt-1 text-center">第{{ b }}篮</div>
                   </div>
+                </div>
+                <div v-if="openedBaskets.length > 0" key="chicken-summary" class="w-full text-center text-sm text-amber-300">
+                  🐔 {{ chickenPerBasket }} × {{ openedBaskets.length }} = {{ totalChickens }}
                 </div>
               </template>
             </TransitionGroup>
@@ -369,6 +392,13 @@ function sleep(ms) {
 .animal-group-merged {
   opacity: 0.3;
   transform: scale(0.9);
+}
+
+.basket-group {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
 }
 
 .animal-enter-active {
