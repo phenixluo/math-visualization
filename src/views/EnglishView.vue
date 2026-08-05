@@ -140,11 +140,32 @@
         <h2 class="text-2xl font-bold text-white mb-2 text-center">自然拼读发音参考</h2>
         <p class="text-gray-400 text-sm text-center mb-6">按音节模式分组，点击示例词听发音</p>
 
-        <div class="space-y-5">
+        <!-- 搜索框 -->
+        <div class="max-w-xl mx-auto mb-6 relative">
+          <input
+            v-model="searchPattern"
+            placeholder="搜索音节模式或示例词，如 ai、a_e、cat"
+            class="w-full px-4 py-2 pl-10 rounded-lg bg-slate-700 text-white placeholder-gray-400 border border-slate-600 focus:border-amber-500 focus:outline-none transition"
+          />
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          <button
+            v-if="searchPattern"
+            @click="searchPattern = ''"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            title="清除"
+          >✕</button>
+        </div>
+
+        <div v-if="filteredPronounceGroups.length === 0" class="text-center text-gray-400 py-10">
+          未找到匹配「{{ searchPattern }}」的音节模式
+        </div>
+
+        <div v-else class="space-y-5">
           <div
-            v-for="(group, gidx) in pronounceGroups"
+            v-for="(group, gidx) in filteredPronounceGroups"
             :key="group.name"
-            class="bg-slate-800 rounded-xl p-5 border-l-4"
+            :ref="el => { if (searchPattern && gidx === 0) firstMatchRef = el }"
+            class="bg-slate-800 rounded-xl p-5 border-l-4 scroll-mt-4"
             :style="{ borderLeftColor: syllableColors[gidx % syllableColors.length] }"
           >
             <div class="flex items-baseline justify-between mb-3">
@@ -157,6 +178,7 @@
                 :key="item.pattern"
                 @click="speak(item.word, 0.8)"
                 class="pronounce-item"
+                :class="{ 'pronounce-item-highlighted': isItemMatch(item) }"
                 :title="`点击听 ${item.word} 发音`"
               >
                 <div class="text-amber-400 font-bold text-lg">{{ item.pattern }}</div>
@@ -172,7 +194,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 
 const currentTab = ref('split')
 const tabs = [
@@ -646,6 +668,48 @@ const pronounceGroups = [
   }
 ]
 
+// ============ 模块3搜索 ============
+const searchPattern = ref('')
+const firstMatchRef = ref(null)
+
+// 过滤分组：分组名匹配则整组显示，否则只显示匹配的 items
+const filteredPronounceGroups = computed(() => {
+  const q = searchPattern.value.trim().toLowerCase()
+  if (!q) return pronounceGroups
+  return pronounceGroups
+    .map(g => {
+      // 分组名或提示匹配，整组显示
+      if (g.name.toLowerCase().includes(q) || g.hint.toLowerCase().includes(q)) {
+        return g
+      }
+      // 否则过滤 items：pattern 去下划线包含匹配，或 word 精确匹配
+      const items = g.items.filter(it => {
+        const pat = it.pattern.toLowerCase().replace(/_/g, '')
+        return pat.includes(q) || it.word.toLowerCase() === q
+      })
+      return { ...g, items }
+    })
+    .filter(g => g.items.length > 0)
+})
+
+// 判断单个 item 是否匹配搜索词（用于高亮）
+function isItemMatch(item) {
+  const q = searchPattern.value.trim().toLowerCase()
+  if (!q) return false
+  const pat = item.pattern.toLowerCase().replace(/_/g, '')
+  return pat.includes(q) || item.word.toLowerCase() === q
+}
+
+// 搜索时滚动到第一个匹配分组
+watch(searchPattern, (q) => {
+  if (!q.trim()) return
+  nextTick(() => {
+    if (firstMatchRef.value) {
+      firstMatchRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  })
+})
+
 // Web Speech API 朗读
 function speak(text, rate = 0.9) {
   if (!('speechSynthesis' in window)) {
@@ -731,5 +795,10 @@ function speak(text, rate = 0.9) {
   background: rgba(251, 191, 36, 0.15);
   border-color: rgba(251, 191, 36, 0.5);
   transform: translateY(-1px);
+}
+.pronounce-item-highlighted {
+  background: rgba(251, 191, 36, 0.25);
+  border-color: rgba(251, 191, 36, 0.9);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.4);
 }
 </style>
