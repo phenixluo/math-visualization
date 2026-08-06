@@ -94,7 +94,7 @@
           <div class="flex justify-center gap-2 mb-4">
             <input
               v-model="typeInput"
-              @input="detectType"
+              @input="detectWordSyllableTypes"
               placeholder="输入单词，判定音节类型"
               class="px-4 py-2 rounded-lg bg-slate-700 text-white w-64 text-center lowercase"
             />
@@ -127,7 +127,7 @@
               <span
                 v-for="ex in t.examples"
                 :key="ex"
-                @click="typeInput = ex; detectType()"
+                @click="typeInput = ex; detectWordSyllableTypes()"
                 class="px-2 py-1 bg-slate-700 text-amber-300 rounded text-sm font-mono cursor-pointer hover:bg-slate-600"
               >{{ ex }}</span>
             </div>
@@ -189,6 +189,89 @@
           </div>
         </div>
       </section>
+
+      <!-- 模块4：句型变换 -->
+      <section v-else-if="currentTab === 'transform'" class="max-w-4xl mx-auto">
+        <h2 class="text-2xl font-bold text-white mb-2 text-center">句型变换</h2>
+        <p class="text-gray-400 text-sm text-center mb-6">输入句子自动转换，或选择预设例句练习拖拽</p>
+
+        <!-- 自由输入区 -->
+        <div class="bg-slate-800 rounded-xl p-4 mb-4">
+          <div class="flex gap-2">
+            <input
+              v-model="customInput"
+              @keyup.enter="parseCustomSentence"
+              placeholder="输入一个句子，如 I am a student."
+              class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <button @click="parseCustomSentence" class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition whitespace-nowrap">
+              拆分
+            </button>
+          </div>
+        </div>
+
+        <!-- 演示区 -->
+        <div class="bg-slate-800 rounded-xl p-6 min-h-[300px]">
+          <div v-if="customParsed">
+            <!-- 词块池 -->
+            <div class="mb-6">
+              <div class="text-gray-400 text-sm mb-2">词块池（拖拽到下方句型框，或点选后点击框）：</div>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="(w, i) in poolWords"
+                  :key="i"
+                  class="word-block word-block-draggable"
+                  :class="{ 'word-block-selected': selectedPoolWord === w }"
+                  draggable="true"
+                  @dragstart="onDragStartPoolWord($event, w)"
+                  @click="selectPoolWord(w)"
+                >{{ w }}</span>
+              </div>
+            </div>
+
+            <!-- 三个句型框 -->
+            <div class="flex flex-col gap-3">
+              <div
+                v-for="t in ['statement', 'yesno', 'wh']"
+                :key="t"
+                :class="['rounded-lg p-3 border-2 border-dashed min-h-[70px] transition cursor-pointer', boxClass(t)]"
+                @dragover.prevent
+                @drop="onDropToBox($event, t)"
+                @click="onBoxClick(t)"
+              >
+                <div class="text-sm mb-2 flex items-center gap-2">
+                  <span class="text-gray-400">{{ t === 'statement' ? '陈述句' : t === 'yesno' ? '一般疑问句' : '特殊疑问句' }}</span>
+                  <span v-if="checkResult && checkResult[t] === true" class="text-green-400 text-xs">✓ 正确</span>
+                  <span v-else-if="checkResult && checkResult[t] === false" class="text-red-400 text-xs">✗ 再想想</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1">
+                  <span
+                    v-for="(w, i) in boxWords[t]"
+                    :key="i"
+                    class="word-block text-sm cursor-pointer hover:!bg-red-900/50"
+                    @click.stop="removeFromBox(t, i)"
+                  >{{ w }}</span>
+                  <span v-if="boxWords[t].length === 0" class="text-gray-600 text-xs italic">拖入或点选单词...</span>
+                  <span v-else class="text-white text-lg ml-1">{{ t === 'statement' ? '.' : '?' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="text-center mt-4">
+              <button @click="checkAnswers" class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition">
+                检查答案
+              </button>
+              <button @click="clearBoxes" class="px-6 py-2 ml-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition">
+                清空
+              </button>
+            </div>
+          </div>
+          <div v-else class="flex items-center justify-center h-full min-h-[250px] text-gray-500 text-sm">
+            在上方输入一个句子并点击「拆分」，词块会显示在这里供拖拽组装
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 </template>
@@ -200,7 +283,8 @@ const currentTab = ref('split')
 const tabs = [
   { id: 'split', name: '音节拆分' },
   { id: 'types', name: '音节类型' },
-  { id: 'pronounce', name: '音节发音' }
+  { id: 'pronounce', name: '音节发音' },
+  { id: 'transform', name: '句型变换' }
 ]
 
 const syllableColors = [
@@ -487,7 +571,7 @@ const syllableTypes = [
   { name: '辅音 + le 音节', pattern: '辅音 + le', rule: '词尾是辅音 + le，前面的辅音与 le 组成一个无重音音节。', examples: ['apple', 'table', 'little', 'candle', 'bubble'] }
 ]
 
-function detectType() {
+function detectWordSyllableTypes() {
   const w = typeInput.value.toLowerCase().trim()
   if (!w) {
     typeResult.value = null
@@ -710,6 +794,420 @@ watch(searchPattern, (q) => {
   })
 })
 
+// ============ 模块4：句型变换 ============
+
+// --- 自由输入模式 ---
+const BE_VERBS_SET = new Set(['am', 'is', 'are', 'was', 'were'])
+const MODAL_VERBS_SET = new Set(['can', 'could', 'will', 'would', 'should', 'may', 'might', 'must', 'shall'])
+const AUX_VERBS_SET = new Set(['do', 'does', 'did', 'have', 'has', 'had'])
+const QUESTION_WORDS_SET = new Set(['what', 'where', 'when', 'who', 'why', 'how', 'which', 'whose'])
+
+const customInput = ref('')
+const customParsed = ref(false)
+const customType = ref('')
+const customResults = ref({ statement: [], yesno: [], wh: [] })
+
+function detectType(words) {
+  const first = words[0].toLowerCase()
+  if (QUESTION_WORDS_SET.has(first)) return 'wh'
+  if (BE_VERBS_SET.has(first) || MODAL_VERBS_SET.has(first) || AUX_VERBS_SET.has(first)) return 'yesno'
+  return 'statement'
+}
+
+function statementToYesNo(words) {
+  const lower = words.map(w => w.toLowerCase())
+  // be 动词提前
+  for (let i = 1; i < words.length; i++) {
+    if (BE_VERBS_SET.has(lower[i])) {
+      const be = capitalize(words[i])
+      const rest = words.filter((_, idx) => idx !== i).map((w, idx) => idx === 0 ? lowercaseFirst(w) : w)
+      return [be, ...rest]
+    }
+  }
+  // 情态动词提前
+  for (let i = 1; i < words.length; i++) {
+    if (MODAL_VERBS_SET.has(lower[i])) {
+      const modal = capitalize(words[i])
+      const rest = words.filter((_, idx) => idx !== i).map((w, idx) => idx === 0 ? lowercaseFirst(w) : w)
+      return [modal, ...rest]
+    }
+  }
+  // 实义动词：加 Do/Does
+  const subject = lower[0]
+  const thirdPerson = ['he', 'she', 'it'].includes(subject)
+  const verb = words[1]
+  let verbRoot = verb
+  if (thirdPerson) {
+    if (verb.toLowerCase().endsWith('es') && verb.length > 3) {
+      verbRoot = verb.slice(0, -2)
+    } else if (verb.toLowerCase().endsWith('s')) {
+      verbRoot = verb.slice(0, -1)
+    }
+  }
+  const doAux = thirdPerson ? 'Does' : 'Do'
+  return [doAux, ...words.map((w, idx) => idx === 1 ? verbRoot : w)]
+}
+
+function statementToWh(words) {
+  const lower = words.map(w => w.toLowerCase())
+  // be 动词句：对表语提问
+  for (let i = 1; i < words.length; i++) {
+    if (BE_VERBS_SET.has(lower[i])) {
+      return ['What', words[i], ...words.slice(0, i).map(w => lowercaseFirst(w))]
+    }
+  }
+  // 情态动词句：对动作提问
+  for (let i = 1; i < words.length; i++) {
+    if (MODAL_VERBS_SET.has(lower[i])) {
+      return ['What', words[i], ...words.slice(0, i).map(w => lowercaseFirst(w)), 'do']
+    }
+  }
+  // 实义动词：对宾语提问
+  const subject = lower[0]
+  const thirdPerson = ['he', 'she', 'it'].includes(subject)
+  const doAux = thirdPerson ? 'does' : 'do'
+  const verb = words[1]
+  let verbRoot = verb
+  if (thirdPerson) {
+    if (verb.toLowerCase().endsWith('es') && verb.length > 3) verbRoot = verb.slice(0, -2)
+    else if (verb.toLowerCase().endsWith('s')) verbRoot = verb.slice(0, -1)
+  }
+  // What + do/does + 主语 + 动词原形
+  return ['What', doAux, ...words.slice(0, 1), verbRoot, ...words.slice(2)]
+}
+
+function yesNoToStatement(words) {
+  const first = words[0]
+  const firstLower = first.toLowerCase()
+  // be/情态动词归位
+  if (BE_VERBS_SET.has(firstLower) || MODAL_VERBS_SET.has(firstLower)) {
+    return [...words.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w), firstLower]
+  }
+  // Do/Does 去掉，动词还原三单（无法完全还原，保持原形）
+  if (AUX_VERBS_SET.has(firstLower)) {
+    return words.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w)
+  }
+  return words
+}
+
+function yesNoToWh(words) {
+  // 一般疑问句 → 特殊疑问句：加 What 到句首
+  return ['What', ...words.slice(1).map(w => lowercaseFirst(w))]
+}
+
+function whToStatement(words) {
+  // 特殊疑问句 → 陈述句：疑问词替换未知，用 [?] 占位
+  const rest = words.slice(1)
+  if (rest.length === 0) return []
+  // 如果第二个词是 be/情态动词，归位到主语后
+  const second = rest[0].toLowerCase()
+  if (BE_VERBS_SET.has(second) || MODAL_VERBS_SET.has(second)) {
+    return [...rest.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w), rest[0], '[?]']
+  }
+  // Do/Does 句：去掉，动词三单还原
+  if (AUX_VERBS_SET.has(second)) {
+    return [...rest.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w), '[?]']
+  }
+  return [...rest.map((w, idx) => idx === 0 ? capitalize(w) : w), '[?]']
+}
+
+function whToYesNo(words) {
+  // 特殊疑问句 → 一般疑问句：去掉疑问词，剩余保持
+  return words.slice(1)
+}
+
+function capitalize(w) {
+  return w.charAt(0).toUpperCase() + w.slice(1)
+}
+
+function lowercaseFirst(w) {
+  return w.charAt(0).toLowerCase() + w.slice(1)
+}
+
+function parseCustomSentence() {
+  const raw = customInput.value.trim()
+  if (!raw) return
+  const cleaned = raw.replace(/[.?!,]/g, '').trim()
+  const words = cleaned.split(/\s+/).filter(w => w)
+  if (words.length < 2) return
+
+  const type = detectType(words)
+  customType.value = type
+
+  if (type === 'statement') {
+    customResults.value = {
+      statement: words,
+      yesno: statementToYesNo(words),
+      wh: statementToWh(words)
+    }
+  } else if (type === 'yesno') {
+    customResults.value = {
+      statement: yesNoToStatement(words),
+      yesno: words,
+      wh: yesNoToWh(words)
+    }
+  } else {
+    customResults.value = {
+      statement: whToStatement(words),
+      yesno: whToYesNo(words),
+      wh: words
+    }
+  }
+  // 构建词块池：输入词 + 疑问词 + 助动词（去重）
+  const helpers = ['What', 'Where', 'When', 'Who', 'Why', 'How', 'do', 'does', 'did']
+  const lowerWords = words.map(w => w.toLowerCase())
+  poolWords.value = [...words, ...helpers.filter(h => !lowerWords.includes(h.toLowerCase()))]
+  boxWords.value = { statement: [], yesno: [], wh: [] }
+  checkResult.value = null
+  selectedPoolWord.value = ''
+  customParsed.value = true
+}
+
+// --- 拖拽组装模式 ---
+const poolWords = ref([])
+const boxWords = ref({ statement: [], yesno: [], wh: [] })
+const checkResult = ref(null)
+const selectedPoolWord = ref('')
+const draggedWord = ref('')
+
+function selectPoolWord(w) {
+  selectedPoolWord.value = selectedPoolWord.value === w ? '' : w
+}
+
+function onDragStartPoolWord(e, word) {
+  draggedWord.value = word
+  e.dataTransfer.setData('text/plain', word)
+}
+
+function onDropToBox(e, boxType) {
+  e.preventDefault()
+  const word = e.dataTransfer.getData('text/plain') || draggedWord.value
+  if (word) addWordToBox(boxType, word)
+}
+
+function onBoxClick(boxType) {
+  if (selectedPoolWord.value) {
+    addWordToBox(boxType, selectedPoolWord.value)
+    selectedPoolWord.value = ''
+  }
+}
+
+function addWordToBox(boxType, word) {
+  // 首词自动大写
+  let w = word
+  if (boxWords.value[boxType].length === 0) {
+    w = w.charAt(0).toUpperCase() + w.slice(1)
+  }
+  boxWords.value[boxType] = [...boxWords.value[boxType], w]
+  checkResult.value = null
+}
+
+function removeFromBox(boxType, idx) {
+  boxWords.value[boxType] = boxWords.value[boxType].filter((_, i) => i !== idx)
+  checkResult.value = null
+}
+
+function clearBoxes() {
+  boxWords.value = { statement: [], yesno: [], wh: [] }
+  checkResult.value = null
+}
+
+function boxClass(t) {
+  if (checkResult.value && checkResult.value[t] === true) return 'border-green-500 bg-green-900/20'
+  if (checkResult.value && checkResult.value[t] === false) return 'border-red-500 bg-red-900/20'
+  if (selectedPoolWord.value) return 'border-amber-400 bg-amber-900/10'
+  return 'border-white/20 bg-slate-900/30'
+}
+
+function checkAnswers() {
+  const result = {}
+  for (const t of ['statement', 'yesno', 'wh']) {
+    const correct = customResults.value[t]
+    if (!correct || correct.length === 0) { result[t] = null; continue }
+    const user = boxWords.value[t].map(w => w.toLowerCase())
+    const target = correct.map(w => w.toLowerCase())
+    if (user.length !== target.length) { result[t] = false; continue }
+    let ok = true
+    for (let i = 0; i < target.length; i++) {
+      if (target[i] === '[?]') continue // 未知词占位，跳过
+      if (user[i] !== target[i]) { ok = false; break }
+    }
+    result[t] = ok
+  }
+  checkResult.value = result
+}
+
+// --- 预设例句拖拽模式 ---
+const sentenceData = [
+  {
+    id: 1, difficulty: 1,
+    statement: ['I', 'am', 'a', 'student'],
+    auxIndex: 1,
+    yesNoTarget: ['Am', 'I', 'a', 'student'],
+    highlight: [2, 3], highlightWords: ['a', 'student'],
+    questionWord: 'What',
+    whTarget: ['What', 'am', 'I'],
+    ruleYesNo: 'be 动词 am 提到句首，句号变问号',
+    ruleWh: '用 What 替换 a student，放到句首'
+  },
+  {
+    id: 2, difficulty: 1,
+    statement: ['She', 'is', 'happy'],
+    auxIndex: 1,
+    yesNoTarget: ['Is', 'she', 'happy'],
+    highlight: [2], highlightWords: ['happy'],
+    questionWord: 'How',
+    whTarget: ['How', 'is', 'she'],
+    ruleYesNo: 'be 动词 is 提到句首，句号变问号',
+    ruleWh: '用 How 替换 happy，放到句首'
+  },
+  {
+    id: 3, difficulty: 2,
+    statement: ['He', 'can', 'swim'],
+    auxIndex: 1,
+    yesNoTarget: ['Can', 'he', 'swim'],
+    highlight: [2], highlightWords: ['swim'],
+    questionWord: 'What',
+    whTarget: ['What', 'can', 'he', 'do'],
+    ruleYesNo: '情态动词 can 提到句首，句号变问号',
+    ruleWh: '用 What 替换 swim（改为 do），放到句首'
+  },
+  {
+    id: 4, difficulty: 2,
+    statement: ['They', 'are', 'playing'],
+    auxIndex: 1,
+    yesNoTarget: ['Are', 'they', 'playing'],
+    highlight: [2], highlightWords: ['playing'],
+    questionWord: 'What',
+    whTarget: ['What', 'are', 'they', 'doing'],
+    ruleYesNo: 'be 动词 are 提到句首，句号变问号',
+    ruleWh: '用 What 替换 playing（改为 doing），放到句首'
+  },
+  {
+    id: 5, difficulty: 3,
+    statement: ['You', 'like', 'apples'],
+    auxIndex: null, needsDoDoes: 'Do',
+    yesNoTarget: ['Do', 'you', 'like', 'apples'],
+    highlight: [2], highlightWords: ['apples'],
+    questionWord: 'What',
+    whTarget: ['What', 'do', 'you', 'like'],
+    ruleYesNo: '实义动词要加助动词 Do 到句首，句号变问号',
+    ruleWh: '用 What 替换 apples，放到句首'
+  },
+  {
+    id: 6, difficulty: 3,
+    statement: ['He', 'goes', 'to', 'school'],
+    auxIndex: null, needsDoDoes: 'Does', verbRoot: 'go',
+    yesNoTarget: ['Does', 'he', 'go', 'to', 'school'],
+    highlight: [2, 3], highlightWords: ['to', 'school'],
+    questionWord: 'Where',
+    whTarget: ['Where', 'does', 'he', 'go'],
+    ruleYesNo: '三单加 Does 到句首，goes 还原为 go，句号变问号',
+    ruleWh: '用 Where 替换 to school，放到句首'
+  }
+]
+
+const questionWords = ['What', 'Where', 'When', 'Who', 'Why', 'How']
+const currentSentenceIdx = ref(0)
+const transformStage = ref(1)
+const yesNoDone = ref(false)
+const whDone = ref(false)
+const movedAux = ref('')
+const selectedQWord = ref('')
+const wrongQWord = ref(false)
+
+const currentSentence = computed(() => sentenceData[currentSentenceIdx.value])
+
+// 要拖的助动词/be动词/情态动词标签
+const auxLabel = computed(() => {
+  const s = currentSentence.value
+  return s.needsDoDoes || s.statement[s.auxIndex]
+})
+
+// 一般疑问句中 aux 后面的词（未完成时从原句取，完成时从目标句取）
+const yesNoRemaining = computed(() => {
+  const s = currentSentence.value
+  if (yesNoDone.value) return s.yesNoTarget.slice(1)
+  if (s.needsDoDoes) {
+    // do/does 句：显示原句，三单动词还原
+    if (s.verbRoot) return s.statement.map((w, i) => i === 1 ? s.verbRoot : w)
+    return [...s.statement]
+  }
+  // be/modal 句：去掉 aux
+  return s.statement.filter((_, i) => i !== s.auxIndex)
+})
+
+// 特殊疑问句中疑问词后面的词
+const whRemaining = computed(() => {
+  if (!whDone.value) return []
+  return currentSentence.value.whTarget.slice(1)
+})
+
+// 被替换的词（淡出展示）
+const fadedWords = computed(() => {
+  const s = currentSentence.value
+  return s.highlight.map(i => s.statement[i])
+})
+
+function selectSentence(idx) {
+  currentSentenceIdx.value = idx
+  resetTransform()
+}
+
+function resetTransform() {
+  transformStage.value = 1
+  yesNoDone.value = false
+  whDone.value = false
+  movedAux.value = ''
+  selectedQWord.value = ''
+  wrongQWord.value = false
+}
+
+function onDragStartAux(e) {
+  e.dataTransfer.setData('text/plain', auxLabel.value)
+}
+
+function onDropAux(e) {
+  e.preventDefault()
+  autoMoveAux()
+}
+
+function autoMoveAux() {
+  const word = auxLabel.value
+  movedAux.value = word.charAt(0).toUpperCase() + word.slice(1)
+  yesNoDone.value = true
+}
+
+function selectQuestionWord(qw) {
+  selectedQWord.value = qw
+  wrongQWord.value = false
+}
+
+function onDragStartQWord(e, qw) {
+  e.dataTransfer.setData('text/plain', qw)
+  selectedQWord.value = qw
+}
+
+function onDropQWord(e) {
+  e.preventDefault()
+  autoPlaceQWord()
+}
+
+function autoPlaceQWord() {
+  if (!selectedQWord.value) return
+  if (selectedQWord.value === currentSentence.value.questionWord) {
+    whDone.value = true
+    wrongQWord.value = false
+  } else {
+    wrongQWord.value = true
+    setTimeout(() => { wrongQWord.value = false }, 1500)
+  }
+}
+
+function nextSentence() {
+  selectSentence((currentSentenceIdx.value + 1) % sentenceData.length)
+}
+
 // Web Speech API 朗读
 function speak(text, rate = 0.9) {
   if (!('speechSynthesis' in window)) {
@@ -800,5 +1298,96 @@ function speak(text, rate = 0.9) {
   background: rgba(251, 191, 36, 0.25);
   border-color: rgba(251, 191, 36, 0.9);
   box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.4);
+}
+
+/* ============ 句型变换 ============ */
+.word-block {
+  display: inline-block;
+  padding: 8px 16px;
+  background: rgba(96, 165, 250, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 8px;
+  color: #dbeafe;
+  font-size: 18px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+.word-highlight {
+  background: rgba(251, 191, 36, 0.3);
+  border-color: rgba(251, 191, 36, 0.6);
+  color: #fde68a;
+}
+.word-block-draggable {
+  cursor: grab;
+  user-select: none;
+}
+.word-block-draggable:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+.word-block-draggable:hover {
+  background: rgba(96, 165, 250, 0.35);
+  border-color: rgba(96, 165, 250, 0.7);
+  transform: translateY(-2px);
+}
+.word-block-selected {
+  background: rgba(251, 191, 36, 0.4);
+  border-color: rgba(251, 191, 36, 1);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5);
+}
+.word-block-aux {
+  background: rgba(168, 85, 247, 0.3);
+  border-color: rgba(168, 85, 247, 0.6);
+  color: #e9d5ff;
+  font-weight: 700;
+}
+.word-block-qword {
+  background: rgba(34, 197, 94, 0.3);
+  border-color: rgba(34, 197, 94, 0.6);
+  color: #bbf7d0;
+  font-weight: 700;
+}
+.word-faded {
+  opacity: 0.35;
+  text-decoration: line-through;
+  background: rgba(100, 116, 139, 0.2);
+  border-color: rgba(100, 116, 139, 0.3);
+  color: #94a3b8;
+}
+.drop-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 2px dashed rgba(251, 191, 36, 0.4);
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.05);
+  transition: all 0.2s;
+}
+.drop-zone-active {
+  border-color: rgba(251, 191, 36, 0.7);
+  background: rgba(251, 191, 36, 0.1);
+  cursor: pointer;
+}
+.drop-zone-active:hover {
+  border-color: rgba(251, 191, 36, 1);
+  background: rgba(251, 191, 36, 0.2);
+}
+.shake {
+  animation: shake 0.4s;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+.fade-out-enter-active {
+  transition: all 0.5s ease;
+}
+.fade-out-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>
