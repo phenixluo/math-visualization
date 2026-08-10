@@ -278,6 +278,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
+import phonicsRules from '../rules/phonics-rules.json'
 
 const currentTab = ref('split')
 const tabs = [
@@ -296,23 +297,12 @@ const syllableColors = [
   '#f472b6'
 ]
 
-// ============ 自然拼读规则字典 ============
-const VOWELS = 'aeiouy'
-
-// 元音组合（一个音）
-const VOWEL_TEAMS = [
-  'igh', 'eigh', 'aigh', 'air', 'ear', 'eer', 'oor', 'our', 'oar',
-  'ai', 'ay', 'ea', 'ee', 'ey', 'ie', 'oa', 'oe', 'oo', 'ou', 'ow', 'ue', 'ui', 'oi', 'oy', 'au', 'aw', 'eu', 'ew', 'ei'
-]
-
-// 辅音二合（1个音，不拆）
-const CONSONANT_DIGRAPHS = ['tch', 'ch', 'sh', 'th', 'ph', 'wh', 'ck', 'ng', 'qu', 'wr', 'kn', 'gn', 'mb', 'gh']
-
-// 辅音簇（多音连读，跨音节时仍可分）
-const CONSONANT_BLENDS = ['scr', 'spr', 'spl', 'str', 'bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'tr', 'sp', 'st', 'sk', 'sm', 'sn', 'sw', 'tw']
-
-// 双辅音（相同字母双写，发单音）
-const DOUBLE_CONSONANTS = ['ll', 'ss', 'tt', 'nn', 'pp', 'dd', 'gg', 'bb', 'mm', 'ff', 'rr']
+// ============ 自然拼读规则（从 JSON 加载）============
+const VOWELS = phonicsRules.vowels
+const VOWEL_TEAMS = phonicsRules.vowelTeams
+const CONSONANT_DIGRAPHS = phonicsRules.consonantDigraphs
+const CONSONANT_BLENDS = phonicsRules.consonantBlends
+const DOUBLE_CONSONANTS = phonicsRules.doubleConsonants
 
 // ============ 音节拆分核心算法 ============
 
@@ -326,8 +316,11 @@ function findVowelCores(w) {
       while (i + 1 < w.length && VOWELS.includes(w[i + 1])) i++
       let end = i
       // r-controlled：元音组后紧跟 r，r 归入核
+      // 但如果 r 后面紧跟着另一个元音，则 r 归后面音节（如 orange: o-ran-ge，不是 or-ange）
       if (end + 1 < w.length && w[end + 1] === 'r') {
-        end++
+        if (!(end + 2 < w.length && VOWELS.includes(w[end + 2]))) {
+          end++
+        }
       }
       cores.push([start, end])
     }
@@ -383,7 +376,11 @@ function splitSyllables(word) {
     } else if (consCount === 2) {
       // VCCV：digraph 不可拆归后，其余中间分
       const pair = w.slice(consStart, consEnd + 1)
-      if (CONSONANT_DIGRAPHS.includes(pair)) {
+      // 例外：如果辅音二合是 ng/dg 且后面紧跟词尾 e（组成 nge/dge 音节），则中间切，前辅音归前，g 与 e 组成 ge
+      const isBeforeFinalGe = (pair === 'ng' || pair === 'dg') &&
+                              consEnd + 1 === w.length - 1 &&
+                              w[consEnd + 1] === 'e'
+      if (CONSONANT_DIGRAPHS.includes(pair) && !isBeforeFinalGe) {
         splitPos = consStart
       } else {
         splitPos = consStart + 1
@@ -562,14 +559,7 @@ function splitWord() {
 const typeInput = ref('')
 const typeResult = ref(null)
 
-const syllableTypes = [
-  { name: '闭音节', pattern: '元音 + 辅音', rule: '元音后面跟着辅音（结尾），元音发短音。', examples: ['cat', 'dog', 'sit', 'bed', 'cup'] },
-  { name: '开音节', pattern: '元音结尾', rule: '单词或音节以元音结尾，元音发长音（字母本音）。', examples: ['go', 'me', 'no', 'he', 'she'] },
-  { name: '相对开音节', pattern: '元音 + 辅音 + e', rule: '词尾有不发音的 e，前面的元音发长音，e 自己不发音。', examples: ['cake', 'bike', 'home', 'tube', 'kite'] },
-  { name: 'R 控制音节', pattern: '元音 + r', rule: '元音后面跟着 r，元音发音受 r 影响，不再发短音或长音。', examples: ['car', 'bird', 'fork', 'turn', 'star'] },
-  { name: '双元音音节', pattern: '元音 + 元音', rule: '两个元音字母在一起，通常第一个发长音，第二个不发音。', examples: ['rain', 'boat', 'see', 'train', 'tie'] },
-  { name: '辅音 + le 音节', pattern: '辅音 + le', rule: '词尾是辅音 + le，前面的辅音与 le 组成一个无重音音节。', examples: ['apple', 'table', 'little', 'candle', 'bubble'] }
-]
+const syllableTypes = phonicsRules.syllableTypes
 
 function detectWordSyllableTypes() {
   const w = typeInput.value.toLowerCase().trim()
@@ -585,172 +575,7 @@ function detectWordSyllableTypes() {
 }
 
 // ============ 模块3：自然拼读发音参考（按发音分组）============
-const pronounceGroups = [
-  {
-    name: '/æ/ 短 a 音',
-    hint: '闭音节中的 a',
-    items: [
-      { pattern: 'a', word: 'cat' }
-    ]
-  },
-  {
-    name: '/eɪ/ 长双元音',
-    hint: 'a 的长音',
-    items: [
-      { pattern: 'a_e', word: 'cake' },
-      { pattern: 'ai', word: 'rain' },
-      { pattern: 'ay', word: 'play' },
-      { pattern: 'ey', word: 'they' }
-    ]
-  },
-  {
-    name: '/e/ 短 e 音',
-    hint: '闭音节中的 e',
-    items: [
-      { pattern: 'e', word: 'bed' }
-    ]
-  },
-  {
-    name: '/iː/ 长音',
-    hint: 'e 的长音',
-    items: [
-      { pattern: 'e_e', word: 'these' },
-      { pattern: 'ee', word: 'see' },
-      { pattern: 'ea', word: 'seat' },
-      { pattern: 'y', word: 'happy' }
-    ]
-  },
-  {
-    name: '/ɪ/ 短 i 音',
-    hint: '闭音节中的 i',
-    items: [
-      { pattern: 'i', word: 'sit' }
-    ]
-  },
-  {
-    name: '/aɪ/ 长双元音',
-    hint: 'i 的长音',
-    items: [
-      { pattern: 'i_e', word: 'bike' },
-      { pattern: 'igh', word: 'light' },
-      { pattern: 'ie', word: 'pie' },
-      { pattern: 'y', word: 'fly' }
-    ]
-  },
-  {
-    name: '/ɒ/ 短 o 音',
-    hint: '闭音节中的 o',
-    items: [
-      { pattern: 'o', word: 'dog' }
-    ]
-  },
-  {
-    name: '/oʊ/ 长双元音',
-    hint: 'o 的长音',
-    items: [
-      { pattern: 'o_e', word: 'home' },
-      { pattern: 'oa', word: 'boat' },
-      { pattern: 'ow', word: 'low' },
-      { pattern: 'o', word: 'go' }
-    ]
-  },
-  {
-    name: '/uː/ 长音',
-    hint: 'u 的长音',
-    items: [
-      { pattern: 'u_e', word: 'tube' },
-      { pattern: 'ue', word: 'blue' },
-      { pattern: 'ew', word: 'chew' },
-      { pattern: 'oo', word: 'moon' }
-    ]
-  },
-  {
-    name: '/ʌ/ 短 u 音',
-    hint: '闭音节中的 u',
-    items: [
-      { pattern: 'u', word: 'cup' }
-    ]
-  },
-  {
-    name: '/ʊ/ 短音',
-    hint: '部分 oo 组合',
-    items: [
-      { pattern: 'oo', word: 'book' }
-    ]
-  },
-  {
-    name: '/aʊ/ 双元音',
-    hint: 'ou/ow 组合',
-    items: [
-      { pattern: 'ou', word: 'house' },
-      { pattern: 'ow', word: 'cow' }
-    ]
-  },
-  {
-    name: '/ɔɪ/ 双元音',
-    hint: 'oi/oy 组合',
-    items: [
-      { pattern: 'oi', word: 'boy' },
-      { pattern: 'oy', word: 'toy' }
-    ]
-  },
-  {
-    name: 'R 控制元音',
-    hint: '元音 + r，发音受 r 影响',
-    items: [
-      { pattern: 'ar', word: 'car' },
-      { pattern: 'er', word: 'her' },
-      { pattern: 'ir', word: 'bird' },
-      { pattern: 'or', word: 'fork' },
-      { pattern: 'ur', word: 'turn' }
-    ]
-  },
-  {
-    name: '辅音二合（发单音）',
-    hint: '两个辅音字母组合发一个音',
-    items: [
-      { pattern: 'ch', word: 'chair' },
-      { pattern: 'sh', word: 'ship' },
-      { pattern: 'th', word: 'think' },
-      { pattern: 'ph', word: 'phone' },
-      { pattern: 'wh', word: 'white' },
-      { pattern: 'ck', word: 'duck' },
-      { pattern: 'ng', word: 'sing' },
-      { pattern: 'qu', word: 'queen' }
-    ]
-  },
-  {
-    name: 'gh 不发音',
-    hint: 'gh 组合不发音',
-    items: [
-      { pattern: 'gh', word: 'high' },
-      { pattern: 'igh', word: 'light' },
-      { pattern: 'ough', word: 'though' }
-    ]
-  },
-  {
-    name: '不发音字母',
-    hint: '这些字母组合中有字母不发音',
-    items: [
-      { pattern: 'kn', word: 'knee' },
-      { pattern: 'wr', word: 'write' },
-      { pattern: 'mb', word: 'lamb' },
-      { pattern: 'gn', word: 'sign' }
-    ]
-  },
-  {
-    name: '辅音 + le',
-    hint: '词尾辅音 + le，e 不发音',
-    items: [
-      { pattern: '-ble', word: 'table' },
-      { pattern: '-dle', word: 'middle' },
-      { pattern: '-ple', word: 'apple' },
-      { pattern: '-tle', word: 'little' },
-      { pattern: '-kle', word: 'ankle' },
-      { pattern: '-fle', word: 'waffle' }
-    ]
-  }
-]
+const pronounceGroups = phonicsRules.pronounceGroups
 
 // ============ 模块3搜索 ============
 const searchPattern = ref('')
@@ -801,6 +626,22 @@ const BE_VERBS_SET = new Set(['am', 'is', 'are', 'was', 'were'])
 const MODAL_VERBS_SET = new Set(['can', 'could', 'will', 'would', 'should', 'may', 'might', 'must', 'shall'])
 const AUX_VERBS_SET = new Set(['do', 'does', 'did', 'have', 'has', 'had'])
 const QUESTION_WORDS_SET = new Set(['what', 'where', 'when', 'who', 'why', 'how', 'which', 'whose'])
+
+// [?] 占位符的候选答案词块（每个疑问词对应一个）
+const PLACEHOLDER_CANDIDATES = {
+  what: 'something',
+  where: 'somewhere',
+  when: 'sometime',
+  who: 'someone',
+  why: 'reason',
+  how: 'way'
+}
+
+// 按疑问词返回对应的单个候选词块
+function suggestCandidates(words) {
+  const w0 = words[0].toLowerCase()
+  return PLACEHOLDER_CANDIDATES[w0] || 'something'
+}
 
 const customInput = ref('')
 const customParsed = ref(false)
@@ -899,12 +740,20 @@ function whToStatement(words) {
   // 特殊疑问句 → 陈述句：疑问词替换未知，用 [?] 占位
   const rest = words.slice(1)
   if (rest.length === 0) return []
-  // 如果第二个词是 be/情态动词，归位到主语后
   const second = rest[0].toLowerCase()
-  if (BE_VERBS_SET.has(second) || MODAL_VERBS_SET.has(second)) {
+  // be 动词：归位到末尾（主语 + 剩余 + be + [?]）
+  // 例: What is your name? → Your name is [?]
+  if (BE_VERBS_SET.has(second)) {
     return [...rest.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w), rest[0], '[?]']
   }
-  // Do/Does 句：去掉，动词三单还原
+  // 情态动词：紧跟主语（主语 + modal + 剩余 + [?]）
+  // 例: What can you do? → You can do [?]
+  if (MODAL_VERBS_SET.has(second)) {
+    return [
+      capitalize(rest[1]), rest[0], ...rest.slice(2), '[?]'
+    ]
+  }
+  // Do/Does 句：去掉，动词三单还原（主语 + 其余 + [?]）
   if (AUX_VERBS_SET.has(second)) {
     return [...rest.slice(1).map((w, idx) => idx === 0 ? capitalize(w) : w), '[?]']
   }
@@ -953,10 +802,19 @@ function parseCustomSentence() {
       wh: words
     }
   }
-  // 构建词块池：输入词 + 疑问词 + 助动词（去重）
+  // 构建词块池：输入词 + 疑问词 + 助动词（去重）+ [?] 占位符对应候选词
   const helpers = ['What', 'Where', 'When', 'Who', 'Why', 'How', 'do', 'does', 'did']
   const lowerWords = words.map(w => w.toLowerCase())
-  poolWords.value = [...words, ...helpers.filter(h => !lowerWords.includes(h.toLowerCase()))]
+  const allTargets = [...customResults.value.statement, ...customResults.value.yesno, ...customResults.value.wh]
+  const hasPlaceholder = allTargets.includes('[?]')
+  let pool = [...words, ...helpers.filter(h => !lowerWords.includes(h.toLowerCase()))]
+  if (hasPlaceholder) {
+    const candidate = suggestCandidates(words)
+    if (!lowerWords.includes(candidate.toLowerCase())) {
+      pool.push(candidate)
+    }
+  }
+  poolWords.value = pool
   boxWords.value = { statement: [], yesno: [], wh: [] }
   checkResult.value = null
   selectedPoolWord.value = ''

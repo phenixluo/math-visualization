@@ -1,0 +1,199 @@
+{
+  "vowels": "aeiouy",
+
+  "vowelTeams": [
+    "igh", "eigh", "aigh", "air", "ear", "eer", "oor", "our", "oar",
+    "ai", "ay", "ea", "ee", "ey", "ie", "oa", "oe", "oo", "ou", "ow",
+    "ue", "ui", "oi", "oy", "au", "aw", "eu", "ew", "ei"
+  ],
+
+  "consonantDigraphs": [
+    "tch", "ch", "sh", "th", "ph", "wh", "ck", "ng", "qu", "wr", "kn", "gn", "mb", "gh"
+  ],
+
+  "consonantBlends": [
+    "scr", "spr", "spl", "str",
+    "bl", "br", "cl", "cr", "dr", "fl", "fr", "gl", "gr",
+    "pl", "pr", "tr", "sp", "st", "sk", "sm", "sn", "sw", "tw"
+  ],
+
+  "doubleConsonants": [
+    "ll", "ss", "tt", "nn", "pp", "dd", "gg", "bb", "mm", "ff", "rr"
+  ],
+
+  "syllableTypes": [
+    { "name": "闭音节", "pattern": "元音 + 辅音", "rule": "元音后面跟着辅音（结尾），元音发短音。", "examples": ["cat", "dog", "sit", "bed", "cup"] },
+    { "name": "开音节", "pattern": "元音结尾", "rule": "单词或音节以元音结尾，元音发长音（字母本音）。", "examples": ["go", "me", "no", "he", "she"] },
+    { "name": "相对开音节", "pattern": "元音 + 辅音 + e", "rule": "词尾有不发音的 e，前面的元音发长音，e 自己不发音。", "examples": ["cake", "bike", "home", "tube", "kite"] },
+    { "name": "R 控制音节", "pattern": "元音 + r", "rule": "元音后面跟着 r，元音发音受 r 影响，不再发短音或长音。", "examples": ["car", "bird", "fork", "turn", "star"] },
+    { "name": "双元音音节", "pattern": "元音 + 元音", "rule": "两个元音字母在一起，通常第一个发长音，第二个不发音。", "examples": ["rain", "boat", "see", "train", "tie"] },
+    { "name": "辅音 + le 音节", "pattern": "辅音 + le", "rule": "词尾是辅音 + le，前面的辅音与 le 组成一个无重音音节。", "examples": ["apple", "table", "little", "candle", "bubble"] }
+  ],
+
+  "pronounceGroups": [
+    {
+      "name": "/æ/ 短 a 音",
+      "hint": "闭音节中的 a",
+      "items": [
+        { "pattern": "a", "word": "cat" }
+      ]
+    },
+    {
+      "name": "/eɪ/ 长双元音",
+      "hint": "a 的长音",
+      "items": [
+        { "pattern": "a_e", "word": "cake" },
+        { "pattern": "ai", "word": "rain" },
+        { "pattern": "ay", "word": "play" },
+        { "pattern": "ey", "word": "they" }
+      ]
+    },
+    {
+      "name": "/e/ 短 e 音",
+      "hint": "闭音节中的 e",
+      "items": [
+        { "pattern": "e", "word": "bed" }
+      ]
+    },
+    {
+      "name": "/iː/ 长音",
+      "hint": "e 的长音",
+      "items": [
+        { "pattern": "e_e", "word": "these" },
+        { "pattern": "ee", "word": "see" },
+        { "pattern": "ea", "word": "seat" },
+        { "pattern": "y", "word": "happy" }
+      ]
+    },
+    {
+      "name": "/ɪ/ 短 i 音",
+      "hint": "闭音节中的 i",
+      "items": [
+        { "pattern": "i", "word": "sit" }
+      ]
+    },
+    {
+      "name": "/aɪ/ 长双元音",
+      "hint": "i 的长音",
+      "items": [
+        { "pattern": "i_e", "word": "bike" },
+        { "pattern": "igh", "word": "light" },
+        { "pattern": "ie", "word": "pie" },
+        { "pattern": "y", "word": "fly" }
+      ]
+    },
+    {
+      "name": "/ɒ/ 短 o 音",
+      "hint": "闭音节中的 o",
+      "items": [
+        { "pattern": "o", "word": "dog" }
+      ]
+    },
+    {
+      "name": "/oʊ/ 长双元音",
+      "hint": "o 的长音",
+      "items": [
+        { "pattern": "o_e", "word": "home" },
+        { "pattern": "oa", "word": "boat" },
+        { "pattern": "ow", "word": "low" },
+        { "pattern": "o", "word": "go" }
+      ]
+    },
+    {
+      "name": "/uː/ 长音",
+      "hint": "u 的长音",
+      "items": [
+        { "pattern": "u_e", "word": "tube" },
+        { "pattern": "ue", "word": "blue" },
+        { "pattern": "ew", "word": "chew" },
+        { "pattern": "oo", "word": "moon" }
+      ]
+    },
+    {
+      "name": "/ʌ/ 短 u 音",
+      "hint": "闭音节中的 u",
+      "items": [
+        { "pattern": "u", "word": "cup" }
+      ]
+    },
+    {
+      "name": "/ʊ/ 短音",
+      "hint": "部分 oo 组合",
+      "items": [
+        { "pattern": "oo", "word": "book" }
+      ]
+    },
+    {
+      "name": "/aʊ/ 双元音",
+      "hint": "ou/ow 组合",
+      "items": [
+        { "pattern": "ou", "word": "house" },
+        { "pattern": "ow", "word": "cow" }
+      ]
+    },
+    {
+      "name": "/ɔɪ/ 双元音",
+      "hint": "oi/oy 组合",
+      "items": [
+        { "pattern": "oi", "word": "boy" },
+        { "pattern": "oy", "word": "toy" }
+      ]
+    },
+    {
+      "name": "R 控制元音",
+      "hint": "元音 + r，发音受 r 影响",
+      "items": [
+        { "pattern": "ar", "word": "car" },
+        { "pattern": "er", "word": "her" },
+        { "pattern": "ir", "word": "bird" },
+        { "pattern": "or", "word": "fork" },
+        { "pattern": "ur", "word": "turn" }
+      ]
+    },
+    {
+      "name": "辅音二合（发单音）",
+      "hint": "两个辅音字母组合发一个音",
+      "items": [
+        { "pattern": "ch", "word": "chair" },
+        { "pattern": "sh", "word": "ship" },
+        { "pattern": "th", "word": "think" },
+        { "pattern": "ph", "word": "phone" },
+        { "pattern": "wh", "word": "white" },
+        { "pattern": "ck", "word": "duck" },
+        { "pattern": "ng", "word": "sing" },
+        { "pattern": "qu", "word": "queen" }
+      ]
+    },
+    {
+      "name": "gh 不发音",
+      "hint": "gh 组合不发音",
+      "items": [
+        { "pattern": "gh", "word": "high" },
+        { "pattern": "igh", "word": "light" },
+        { "pattern": "ough", "word": "though" }
+      ]
+    },
+    {
+      "name": "不发音字母",
+      "hint": "这些字母组合中有字母不发音",
+      "items": [
+        { "pattern": "kn", "word": "knee" },
+        { "pattern": "wr", "word": "write" },
+        { "pattern": "mb", "word": "lamb" },
+        { "pattern": "gn", "word": "sign" }
+      ]
+    },
+    {
+      "name": "辅音 + le",
+      "hint": "词尾辅音 + le，e 不发音",
+      "items": [
+        { "pattern": "-ble", "word": "table" },
+        { "pattern": "-dle", "word": "middle" },
+        { "pattern": "-ple", "word": "apple" },
+        { "pattern": "-tle", "word": "little" },
+        { "pattern": "-kle", "word": "ankle" },
+        { "pattern": "-fle", "word": "waffle" }
+      ]
+    }
+  ]
+}
