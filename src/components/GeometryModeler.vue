@@ -73,11 +73,13 @@
             <div class="space-y-2">
               <div>
                 <label class="text-xs text-gray-600">起点:</label>
-                <input v-model.number="aLength" type="number" placeholder="例如: 100" class="w-full px-2 py-1 border rounded text-sm"/>
+                <input v-model.number="aLength" type="number" min="0" max="1000" placeholder="例如: 100" class="w-full px-2 py-1 border rounded text-sm"/>
+                <div class="text-[10px] text-gray-400">起点不超过 1000</div>
               </div>
               <div>
                 <label class="text-xs text-gray-600">向前移动多少:</label>
-                <input v-model.number="bLength" type="number" placeholder="例如: 150" class="w-full px-2 py-1 border rounded text-sm"/>
+                <input v-model.number="bLength" type="number" min="0" max="1000" placeholder="例如: 150" class="w-full px-2 py-1 border rounded text-sm"/>
+                <div class="text-[10px] text-gray-400">向前移动不超过 1000</div>
               </div>
             </div>
             <div class="mt-2 text-xs text-gray-600">
@@ -93,7 +95,8 @@
             <div class="font-medium text-purple-800 mb-2">步骤 2: 线段平铺成平面</div>
             <div>
               <label class="text-xs text-gray-600">增加多少条同样的线段:</label>
-              <input v-model.number="additionalLines" type="number" placeholder="例如: 3" class="w-full px-2 py-1 border rounded text-sm"/>
+              <input v-model.number="additionalLines" type="number" min="0" max="9" placeholder="例如: 3" class="w-full px-2 py-1 border rounded text-sm"/>
+              <div class="text-[10px] text-gray-400">线条总数不超过 10</div>
             </div>
             <div class="mt-2 text-xs text-gray-600 space-y-1">
               <div>长: <span class="font-bold text-purple-600">{{ lineLength }}</span></div>
@@ -111,7 +114,8 @@
             <div class="font-medium text-orange-800 mb-2">步骤 3: 创建立方体</div>
             <div>
               <label class="text-xs text-gray-600">高（平面重叠数量）:</label>
-              <input v-model.number="cubeHeightCount" type="number" placeholder="例如: 5" class="w-full px-2 py-1 border rounded text-sm"/>
+              <input v-model.number="cubeHeightCount" type="number" min="0" max="10" placeholder="例如: 5" class="w-full px-2 py-1 border rounded text-sm"/>
+              <div class="text-[10px] text-gray-400">高不超过 10</div>
             </div>
             <div class="mt-2 text-xs text-gray-600 space-y-1">
               <div>长: <span class="font-bold text-orange-600">{{ lineLength }}</span></div>
@@ -144,7 +148,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
@@ -159,6 +163,27 @@ const showCube = ref(false)
 
 const canvasWidth = 800
 const canvasHeight = 500
+
+// 限制线段数量（线条总数 = additionalLines + 1）不超过10
+watch(additionalLines, (v) => {
+  if (v > 9) additionalLines.value = 9
+  if (v < 0) additionalLines.value = 0
+})
+// 限制高（平面重叠数量）不超过10
+watch(cubeHeightCount, (v) => {
+  if (v > 10) cubeHeightCount.value = 10
+  if (v < 0) cubeHeightCount.value = 0
+})
+// 限制起点不超过1000
+watch(aLength, (v) => {
+  if (v > 1000) aLength.value = 1000
+  if (v < 0) aLength.value = 0
+})
+// 限制向前移动多少不超过1000
+watch(bLength, (v) => {
+  if (v > 1000) bLength.value = 1000
+  if (v < 0) bLength.value = 0
+})
 
 const marginLeft = 80
 const marginRight = 80
