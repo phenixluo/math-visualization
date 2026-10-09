@@ -21,6 +21,8 @@
 - **音节拆分** - 基于自然拼读规则引擎的任意单词音节拆分，支持音节内字母段（grapheme）切分，标注元音/辅音段类型、双辅音关联、magic e 等规则
 - **音节类型** - 6 种基本音节类型（闭音节/开音节/相对开音节/R控制/双元音/辅音+le）教学，支持输入任意单词实时判型
 - **音节发音** - 自然拼读发音参考表，按发音分组（如 a_e/ai/ay 同属 /eɪ/ 组），支持 Web Speech API 点击听发音
+- **句型变换** - 输入句子自动转换（陈述句/一般疑问句/特殊疑问句），支持拖拽词块组装练习
+- **联想记忆卡片** - 基于中考词汇表（1766 词）的词族关联图，D3.js 力导向图展示单词间的词根/前后缀/复合词关系，支持搜索过滤
 
 ## 技术栈
 
@@ -84,15 +86,27 @@ math-visualization/
 ├── src/
 │   ├── components/          # Vue 组件
 │   │   ├── BalanceGame.vue  # 方程图形化（天平方程游戏）
+│   │   ├── DetailCard.vue   # 单词详情卡片
 │   │   ├── FunctionPlot.vue # 函数图像
 │   │   ├── GeometryModeler.vue # 几何建模
 │   │   ├── Geometry3D.vue   # 3D 图形
+│   │   ├── MemoryCards.vue  # 联想记忆卡片（词族关联图）
 │   │   └── FormulaDemo.vue  # 公式推导（乘法分配律）
+│   ├── rules/               # 规则数据
+│   │   └── phonics-rules.json # 自然拼读规则
 │   ├── views/               # 视图组件
 │   │   ├── MathView.vue     # 数学图形化视图（含5个子tab）
-│   │   └── EnglishView.vue  # 英语音节学习视图（含3个子tab）
+│   │   └── EnglishView.vue  # 英语视图（含5个子tab：音节拆分/类型/发音/句型变换/联想卡片）
 │   ├── App.vue              # 根组件（顶层导航：数学/英语切换）
 │   └── main.js              # 入口文件
+├── public/
+│   └── vocab_cards.json     # 词族数据（1766节点，426边）
+├── dictionary/              # 词汇工具
+│   ├── build_vocab_json.py  # 词族数据构建脚本
+│   ├── audit_families.py    # 词族审计脚本
+│   ├── 深圳中考英语词汇表.md  # 主词汇表（1579词）
+│   ├── 词汇表.md            # 新课标补充词（187词）
+│   └── 联想记忆卡片_*.md     # 联想卡片分批次
 ├── dist/                    # 构建产物（自动生成）
 ├── index.html               # HTML 模板
 ├── package.json             # 项目配置
