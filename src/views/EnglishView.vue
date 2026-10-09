@@ -272,6 +272,9 @@
           </div>
         </div>
       </section>
+
+      <!-- 模块5：中考词汇联想记忆卡片 -->
+      <MemoryCards v-else-if="currentTab === 'cards'" />
     </main>
   </div>
 </template>
@@ -279,13 +282,15 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import phonicsRules from '../rules/phonics-rules.json'
+import MemoryCards from '../components/MemoryCards.vue'
 
 const currentTab = ref('split')
 const tabs = [
   { id: 'split', name: '音节拆分' },
   { id: 'types', name: '音节类型' },
   { id: 'pronounce', name: '音节发音' },
-  { id: 'transform', name: '句型变换' }
+  { id: 'transform', name: '句型变换' },
+  { id: 'cards', name: '联想卡片' }
 ]
 
 const syllableColors = [
