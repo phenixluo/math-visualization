@@ -77,6 +77,7 @@ const currentChapter = ref('rational')
 const loading = ref(false)
 const knowledgeMapContent = ref(null)
 const selectedKnowledgePoint = ref(null)
+const selectedNodeId = ref(null)
 const svgRef = ref(null)
 
 // 知识点数据结构 - 每个章节包含相互关联的知识点
@@ -482,91 +483,149 @@ const initializeKnowledgeMap = async () => {
       // 更新模拟力的连接
       simulation.nodes(data.nodes).force('link').links(data.links)
       
-      // 绘制连接线
-      const link = linkG.selectAll('line')
-        .data(data.links)
-        .join('line')
-        .attr('stroke', 'rgba(148,163,184,0.2)')
-        .attr('stroke-width', 1.5)
-      
-      // 绘制节点
-      const node = nodeG.selectAll('g')
-        .data(data.nodes)
-        .join('g')
-        .attr('cursor', 'pointer')
-        .on('click', (event, d) => {
-          // 防止事件冒泡
-          event.stopPropagation()
-          handleNodeClick(d)
-        })
-        .on('mouseenter', (event, d) => {
-          d3.select(event.currentTarget).select('circle').attr('stroke-width', 3)
-        })
-        .on('mouseleave', (event, d) => {
-          d3.select(event.currentTarget).select('circle').attr('stroke-width', 1.5)
-        })
-      
-      // 节点圆圈
-      node.append('circle')
-        .attr('r', d => d.size)
-        .attr('fill', d => {
-          // 根据章节分配颜色
-          const chapterColors = {
-            rational: '#fbbf24',
-            expression: '#60a5fa',
-            equation: '#a78bfa',
-            geometry: '#34d399',
-            data: '#f87171',
-            inequality: '#f472b6',
-            triangle: '#fbbf24',
-            polynomial: '#60a5fa',
-            fraction: '#a78bfa'
-          }
-          return chapterColors[currentChapter.value] || '#fbbf24'
-        })
-        .attr('stroke', '#1e293b')
-        .attr('stroke-width', 2)
-      
-      // 节点标题
-      node.append('text')
-        .attr('x', 0)
-        .attr('y', -20)
-        .attr('text-anchor', 'middle')
-        .attr('fill', '#f1f5f9')
-        .attr('font-size', '12px')
-        .attr('font-weight', 600)
-        .text(d => d.title)
-        .style('pointer-events', 'none')
-        .style('user-select', 'none')
-      
-      // 节点标签（技能标签）
-      const labelGroups = node.selectAll('.label-group')
-        .data(d => d.tags.map((tag, i) => ({ tag, index: i, parent: d })))
-        .join('g')
-        .attr('class', 'label-group')
-        .attr('transform', d => {
-          // 计算标签位置（在节点下方排列）
-          const radius = d.parent.size
-          const offset = 20 + (d.index * 18)
-          return `translate(${-d.tag.length * 4},${offset})`
-        })
-      
-      labelGroups.append('rect')
-        .attr('width', d => d.tag.length * 8 + 10)
-        .attr('height', 16)
-        .attr('rx', 4)
-        .attr('fill', 'rgba(30,41,59,0.6)')
-        .attr('stroke', 'rgba(148,163,184,0.3)')
-        .attr('stroke-width', 1)
-      
-      labelGroups.append('text')
-        .attr('x', 5)
-        .attr('y', 12)
-        .attr('fill', '#94a3b8')
-        .attr('font-size', '10px')
-        .text(d => d.tag)
-        .style('pointer-events', 'none')
-        .style('user-select', 'none')
+      // 节点拖拽行为
+    const drag = d3.drag()
+      .on('start', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart()
+        d.fx = d.x
+        d.fy = d.y
+        // 拖拽开始时选中该节点
+        if (selectedNodeId.value !== d.id) {
+          selectedNodeId.value = d.id
+        }
+      })
+      .on('drag', (event, d) => {
+        d.fx = event.x
+        d.fy = event.y
+      })
+      .on('end', (event, d) => {
+        if (!event.active) simulation.alphaTarget(0)
+      })
+    
+    // 高亮与选中节点相关的链接
+    const highlightLinks = (nodeId) => {
+      if (!nodeId) {
+        link.attr('stroke', 'rgba(148,163,184,0.2)')
+          .attr('stroke-width', 1.5)
+        return
+      }
+      link.each(function(d) {
+        const isConnected = d.source.id === nodeId || d.target.id === nodeId
+        d3.select(this)
+          .attr('stroke', isConnected ? '#fbbf24' : 'rgba(148,163,184,0.1)')
+          .attr('stroke-width', isConnected ? 3 : 1)
+      })
+    }
+    
+    // 绘制连接线
+    const link = linkG.selectAll('line')
+      .data(data.links)
+      .join('line')
+      .attr('stroke', 'rgba(148,163,184,0.2)')
+      .attr('stroke-width', 1.5)
+    
+    // 绘制节点
+    const node = nodeG.selectAll('g')
+      .data(data.nodes)
+      .join('g')
+      .attr('cursor', 'pointer')
+      .call(drag)
+      .on('click', (event, d) => {
+        // 防止事件冒泡
+        event.stopPropagation()
+        selectedNodeId.value = d.id
+        highlightLinks(d.id)
+        handleNodeClick(d)
+      })
+      .on('mouseenter', (event, d) => {
+        d3.select(event.currentTarget).select('circle').attr('stroke-width', 3)
+        highlightLinks(d.id)
+      })
+      .on('mouseleave', (event, d) => {
+        // 只有当节点未被选中时才恢复
+        if (selectedNodeId.value !== d.id) {
+          d3.select(event.currentTarget).select('circle').attr('stroke-width', 2)
+          highlightLinks(null)
+        }
+      })
+    
+    // 节点圆圈
+    node.append('circle')
+      .attr('r', d => d.size)
+      .attr('fill', d => {
+        // 根据章节分配颜色
+        const chapterColors = {
+          rational: '#fbbf24',
+          expression: '#60a5fa',
+          equation: '#a78bfa',
+          geometry: '#34d399',
+          data: '#f87171',
+          inequality: '#f472b6',
+          triangle: '#fbbf24',
+          polynomial: '#60a5fa',
+          fraction: '#a78bfa'
+        }
+        return chapterColors[currentChapter.value] || '#fbbf24'
+      })
+      .attr('stroke', d => selectedNodeId.value === d.id ? '#ffffff' : '#1e293b')
+      .attr('stroke-width', d => selectedNodeId.value === d.id ? 4 : 2)
+      .attr('filter', d => selectedNodeId.value === d.id ? 'url(#glow)' : null)
+    
+    // 添加发光滤镜（仅在需要时定义一次）
+    const defs = svg.append('defs')
+    const filter = defs.append('filter')
+      .attr('id', 'glow')
+      .attr('x', '-50%')
+      .attr('y', '-50%')
+      .attr('width', '200%')
+      .attr('height', '200%')
+    filter.append('feGaussianBlur')
+      .attr('stdDeviation', '4')
+      .attr('result', 'coloredBlur')
+    const feMerge = filter.append('feMerge')
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur')
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
+    
+    // 节点标题
+    node.append('text')
+      .attr('x', 0)
+      .attr('y', -20)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#f1f5f9')
+      .attr('font-size', '12px')
+      .attr('font-weight', 600)
+      .text(d => d.title)
+      .style('pointer-events', 'none')
+      .style('user-select', 'none')
+    
+    // 节点标签（技能标签）
+    const labelGroups = node.selectAll('.label-group')
+      .data(d => d.tags.map((tag, i) => ({ tag, index: i, parent: d })))
+      .join('g')
+      .attr('class', 'label-group')
+      .attr('transform', d => {
+        // 计算标签位置（在节点下方排列）
+        const radius = d.parent.size
+        const offset = 20 + (d.index * 18)
+        return `translate(${-d.tag.length * 4},${offset})`
+      })
+    
+    labelGroups.append('rect')
+      .attr('width', d => d.tag.length * 8 + 10)
+      .attr('height', 16)
+      .attr('rx', 4)
+      .attr('fill', 'rgba(30,41,59,0.6)')
+      .attr('stroke', 'rgba(148,163,184,0.3)')
+      .attr('stroke-width', 1)
+    
+    labelGroups.append('text')
+      .attr('x', 5)
+      .attr('y', 12)
+      .attr('fill', '#94a3b8')
+      .attr('font-size', '10px')
+      .text(d => d.tag)
+      .style('pointer-events', 'none')
+      .style('user-select', 'none')
     }
     
     // 模拟力tick事件处理
@@ -585,13 +644,29 @@ const initializeKnowledgeMap = async () => {
     render(mapData.value)
     
     // 监听数据变化
-    const unwatch = watch(mapData, (newData) => {
+    const unwatchData = watch(mapData, (newData) => {
       render(newData)
+    })
+    
+    // 监听选中节点变化，更新节点和链接样式
+    const unwatchNode = watch(selectedNodeId, (newId) => {
+      if (link) {
+        highlightLinks(newId)
+      }
+      if (node) {
+        node.select('circle')
+          .attr('stroke', d => newId === d.id ? '#ffffff' : '#1e293b')
+          .attr('stroke-width', d => newId === d.id ? 4 : 2)
+          .attr('filter', d => newId === d.id ? 'url(#glow)' : null)
+      }
     })
     
     // 处理组件卸载时清理监听
     onMounted(() => {
-      return () => unwatch()
+      return () => {
+        unwatchData()
+        unwatchNode()
+      }
     })
     
   } catch (err) {
@@ -605,8 +680,9 @@ const initializeKnowledgeMap = async () => {
 watch(currentChapter, () => {
   // 重新初始化思维导图
   initializeKnowledgeMap()
-  // 清除选中的知识点
+  // 清除选中的知识点和节点
   selectedKnowledgePoint.value = null
+  selectedNodeId.value = null
 })
 
 // 组件挂载时初始化
