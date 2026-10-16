@@ -19,10 +19,11 @@
 
     <main class="max-w-7xl mx-auto px-4 py-6">
       <FunctionPlot v-if="currentTab === 'function'" />
-      <GeometryModeler v-else-if="currentTab === 'modeler'" />
-      <Geometry3D v-else-if="currentTab === '3d'" />
-      <FormulaDemo v-else-if="currentTab === 'formula'" />
-      <BalanceGame v-else-if="currentTab === 'balance'" />
+<GeometryModeler v-else-if="currentTab === 'modeler'" />
+<Geometry3D v-else-if="currentTab === '3d'" />
+<FormulaDemo v-else-if="currentTab === 'formula'" />
+<BalanceGame v-else-if="currentTab === 'balance'" />
+<KnowledgeMap v-else-if="currentTab === 'knowledge-map'" />
     </main>
   </div>
 </template>
@@ -42,6 +43,7 @@ const tabs = [
   { id: 'modeler', name: '点-线-面-立体' },
   { id: '3d', name: '3D图形' },
   { id: 'formula', name: '公式推导' },
-  { id: 'balance', name: '方程图形化' }
+  { id: 'balance', name: '方程图形化' },
+  { id: 'knowledge-map', name: '知识点思维导图' }
 ]
 </script>
