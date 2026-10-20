@@ -35,8 +35,9 @@ import GeometryModeler from '../components/GeometryModeler.vue'
 import Geometry3D from '../components/Geometry3D.vue'
 import FormulaDemo from '../components/FormulaDemo.vue'
 import BalanceGame from '../components/BalanceGame.vue'
+import KnowledgeMap from '../components/KnowledgeMap.vue'
 
-const currentTab = ref('modeler')
+const currentTab = ref('knowledge-map')
 
 const tabs = [
   { id: 'function', name: '函数图像' },
